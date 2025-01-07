@@ -2,108 +2,147 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Glisse Mesure</title>
+    <title>Convertisseur d'unités</title>
     <style>
-        canvas {
-            border: 1px solid black;
-            margin: 10px;
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .unit-selector {
+            margin-bottom: 20px;
+        }
+        select {
+            padding: 5px;
+            font-size: 16px;
+        }
+        .conversion-table {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .units-row {
+            display: flex;
+            justify-content: space-between;
+            background-color: #f0f0f0;
+            padding: 10px;
+        }
+        .unit-cell {
+            width: 100px;
+            text-align: center;
+            padding: 5px;
+            border: 1px solid #ccc;
+        }
+        .km { background-color: #ffb74d; }
+        .hm { background-color: #fff176; }
+        .dam { background-color: #81c784; }
+        .m { background-color: #ffffff; }
+        .dm { background-color: #ba68c8; }
+        .cm { background-color: #f06292; }
+        .mm { background-color: #ef5350; }
+        .input-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .input-cell {
+            width: 100px;
+            text-align: center;
+        }
+        input {
+            width: 80px;
+            text-align: center;
         }
         .controls {
-            margin: 10px;
+            margin-top: 20px;
+            text-align: center;
         }
-        input[type="number"] {
-            width: 60px;
+        button {
+            padding: 5px 15px;
+            margin: 0 5px;
         }
     </style>
 </head>
 <body>
-    <div class="controls">
-        <input type="number" id="mesure" value="0" min="0" max="100" step="1">
-        <button id="reset">Réinitialiser</button>
+    <div class="container">
+        <div class="unit-selector">
+            <select id="measureType">
+                <option value="longueurs">Longueurs</option>
+                <option value="masses">Masses</option>
+                <option value="contenances">Contenances</option>
+            </select>
+        </div>
+
+        <div class="conversion-table">
+            <div class="units-row">
+                <div class="unit-cell km">km</div>
+                <div class="unit-cell hm">hm</div>
+                <div class="unit-cell dam">dam</div>
+                <div class="unit-cell m">m</div>
+                <div class="unit-cell dm">dm</div>
+                <div class="unit-cell cm">cm</div>
+                <div class="unit-cell mm">mm</div>
+            </div>
+            <div class="input-row">
+                <div class="input-cell"><input type="number" id="km" /></div>
+                <div class="input-cell"><input type="number" id="hm" /></div>
+                <div class="input-cell"><input type="number" id="dam" /></div>
+                <div class="input-cell"><input type="number" id="m" /></div>
+                <div class="input-cell"><input type="number" id="dm" /></div>
+                <div class="input-cell"><input type="number" id="cm" /></div>
+                <div class="input-cell"><input type="number" id="mm" /></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="reset">Réinitialiser</button>
+        </div>
     </div>
-    <canvas id="canvas" width="400" height="100"></canvas>
 
     <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const mesureInput = document.getElementById('mesure');
+        const measureType = document.getElementById('measureType');
+        const inputs = ['km', 'hm', 'dam', 'm', 'dm', 'cm', 'mm'].map(id => document.getElementById(id));
         const resetBtn = document.getElementById('reset');
 
-        let isDragging = false;
-        let startX = 0;
-        let currentX = 0;
-
-        function drawRuler() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Mise à jour des unités selon le type de mesure
+        measureType.addEventListener('change', function() {
+            const units = {
+                'longueurs': ['km', 'hm', 'dam', 'm', 'dm', 'cm', 'mm'],
+                'masses': ['kg', 'hg', 'dag', 'g', 'dg', 'cg', 'mg'],
+                'contenances': ['kL', 'hL', 'daL', 'L', 'dL', 'cL', 'mL']
+            };
             
-            // Dessiner la règle
-            ctx.beginPath();
-            ctx.moveTo(50, 50);
-            ctx.lineTo(350, 50);
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
-            ctx.stroke();
+            const selectedUnits = units[this.value];
+            document.querySelectorAll('.unit-cell').forEach((cell, index) => {
+                cell.textContent = selectedUnits[index];
+            });
+        });
 
-            // Dessiner les graduations
-            for(let i = 0; i <= 100; i++) {
-                const x = 50 + (i * 3);
-                const height = i % 10 === 0 ? 15 : (i % 5 === 0 ? 10 : 5);
+        // Conversion entre les unités
+        inputs.forEach((input, index) => {
+            input.addEventListener('input', function() {
+                if (this.value === '') return;
                 
-                ctx.beginPath();
-                ctx.moveTo(x, 50 - height/2);
-                ctx.lineTo(x, 50 + height/2);
-                ctx.stroke();
+                const value = parseFloat(this.value);
+                const position = index;
 
-                if(i % 10 === 0) {
-                    ctx.fillText(i, x - 3, 70);
-                }
-            }
-
-            // Dessiner le curseur
-            const cursorX = 50 + (mesureInput.value * 3);
-            ctx.beginPath();
-            ctx.moveTo(cursorX, 30);
-            ctx.lineTo(cursorX - 5, 20);
-            ctx.lineTo(cursorX + 5, 20);
-            ctx.closePath();
-            ctx.fillStyle = 'red';
-            ctx.fill();
-        }
-
-        canvas.addEventListener('mousedown', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            if(x >= 50 && x <= 350) {
-                isDragging = true;
-                startX = x;
-                currentX = x;
-            }
+                inputs.forEach((otherInput, otherIndex) => {
+                    if (otherInput !== this) {
+                        const difference = otherIndex - position;
+                        otherInput.value = value * Math.pow(10, -difference);
+                    }
+                });
+            });
         });
 
-        canvas.addEventListener('mousemove', (e) => {
-            if(isDragging) {
-                const rect = canvas.getBoundingClientRect();
-                currentX = e.clientX - rect.left;
-                const value = Math.max(0, Math.min(100, Math.round((currentX - 50) / 3)));
-                mesureInput.value = value;
-                drawRuler();
-            }
-        });
-
-        canvas.addEventListener('mouseup', () => {
-            isDragging = false;
-        });
-
-        mesureInput.addEventListener('input', () => {
-            drawRuler();
-        });
-
+        // Réinitialisation
         resetBtn.addEventListener('click', () => {
-            mesureInput.value = 0;
-            drawRuler();
+            inputs.forEach(input => input.value = '');
         });
-
-        drawRuler();
     </script>
 </body>
 </html>
