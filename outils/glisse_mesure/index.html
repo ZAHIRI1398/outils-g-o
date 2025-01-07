@@ -9,7 +9,7 @@
             margin: 20px;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
         }
         .unit-selector {
@@ -24,18 +24,21 @@
             flex-direction: column;
             gap: 10px;
             margin-top: 20px;
+            position: relative;
         }
         .units-row {
             display: flex;
             justify-content: space-between;
             background-color: #f0f0f0;
             padding: 10px;
+            position: relative;
         }
         .unit-cell {
             width: 100px;
             text-align: center;
             padding: 5px;
             border: 1px solid #ccc;
+            position: relative;
         }
         .km { background-color: #ffb74d; }
         .hm { background-color: #fff176; }
@@ -44,21 +47,50 @@
         .dm { background-color: #ba68c8; }
         .cm { background-color: #f06292; }
         .mm { background-color: #ef5350; }
-        .input-row {
+        .number-display {
             display: flex;
-            justify-content: space-between;
-            margin-top: 10px;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+            gap: 10px;
         }
-        .input-cell {
-            width: 100px;
-            text-align: center;
+        .number-input {
+            width: 120px;
+            font-size: 18px;
+            text-align: right;
+            padding: 5px;
         }
-        input {
-            width: 80px;
-            text-align: center;
+        .unit-label {
+            font-size: 18px;
+        }
+        .decimal-point {
+            width: 10px;
+            height: 20px;
+            background-color: red;
+            position: absolute;
+            bottom: -25px;
+            cursor: pointer;
+            transform: translateX(-50%);
+        }
+        .decimal-point::before {
+            content: ',';
+            position: absolute;
+            color: red;
+            font-size: 24px;
+            font-weight: bold;
+            top: -5px;
+            left: 2px;
+        }
+        .grid-lines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
         }
         .controls {
-            margin-top: 20px;
+            margin-top: 40px;
             text-align: center;
         }
         button {
@@ -77,6 +109,11 @@
             </select>
         </div>
 
+        <div class="number-display">
+            <input type="number" id="valueInput" class="number-input" step="any">
+            <span class="unit-label" id="unitLabel">km</span>
+        </div>
+
         <div class="conversion-table">
             <div class="units-row">
                 <div class="unit-cell km">km</div>
@@ -87,15 +124,7 @@
                 <div class="unit-cell cm">cm</div>
                 <div class="unit-cell mm">mm</div>
             </div>
-            <div class="input-row">
-                <div class="input-cell"><input type="number" id="km" /></div>
-                <div class="input-cell"><input type="number" id="hm" /></div>
-                <div class="input-cell"><input type="number" id="dam" /></div>
-                <div class="input-cell"><input type="number" id="m" /></div>
-                <div class="input-cell"><input type="number" id="dm" /></div>
-                <div class="input-cell"><input type="number" id="cm" /></div>
-                <div class="input-cell"><input type="number" id="mm" /></div>
-            </div>
+            <div id="decimalPoint" class="decimal-point"></div>
         </div>
 
         <div class="controls">
@@ -105,8 +134,14 @@
 
     <script>
         const measureType = document.getElementById('measureType');
-        const inputs = ['km', 'hm', 'dam', 'm', 'dm', 'cm', 'mm'].map(id => document.getElementById(id));
+        const valueInput = document.getElementById('valueInput');
+        const unitLabel = document.getElementById('unitLabel');
+        const decimalPoint = document.getElementById('decimalPoint');
         const resetBtn = document.getElementById('reset');
+        const conversionTable = document.querySelector('.conversion-table');
+
+        let currentPosition = 3; // Position initiale (m)
+        let isDragging = false;
 
         // Mise à jour des unités selon le type de mesure
         measureType.addEventListener('change', function() {
@@ -120,29 +155,65 @@
             document.querySelectorAll('.unit-cell').forEach((cell, index) => {
                 cell.textContent = selectedUnits[index];
             });
+            unitLabel.textContent = selectedUnits[currentPosition];
         });
 
-        // Conversion entre les unités
-        inputs.forEach((input, index) => {
-            input.addEventListener('input', function() {
-                if (this.value === '') return;
-                
-                const value = parseFloat(this.value);
-                const position = index;
+        // Gestion du déplacement de la virgule
+        decimalPoint.style.left = `${(currentPosition + 1) * (100/7)}%`;
 
-                inputs.forEach((otherInput, otherIndex) => {
-                    if (otherInput !== this) {
-                        const difference = otherIndex - position;
-                        otherInput.value = value * Math.pow(10, -difference);
-                    }
-                });
-            });
+        decimalPoint.addEventListener('mousedown', (e) => {
+            isDragging = true;
         });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const rect = conversionTable.getBoundingClientRect();
+            const cellWidth = rect.width / 7;
+            let x = e.clientX - rect.left;
+            
+            // Limiter le déplacement aux frontières des cellules
+            x = Math.max(0, Math.min(x, rect.width));
+            const position = Math.floor(x / cellWidth);
+            
+            if (position !== currentPosition) {
+                currentPosition = position;
+                decimalPoint.style.left = `${(position + 1) * (100/7)}%`;
+                updateDisplay();
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        // Mise à jour de l'affichage
+        function updateDisplay() {
+            if (!valueInput.value) return;
+
+            const value = parseFloat(valueInput.value);
+            const units = {
+                'longueurs': ['km', 'hm', 'dam', 'm', 'dm', 'cm', 'mm'],
+                'masses': ['kg', 'hg', 'dag', 'g', 'dg', 'cg', 'mg'],
+                'contenances': ['kL', 'hL', 'daL', 'L', 'dL', 'cL', 'mL']
+            };
+            
+            const selectedUnits = units[measureType.value];
+            unitLabel.textContent = selectedUnits[currentPosition];
+        }
+
+        valueInput.addEventListener('input', updateDisplay);
 
         // Réinitialisation
         resetBtn.addEventListener('click', () => {
-            inputs.forEach(input => input.value = '');
+            valueInput.value = '';
+            currentPosition = 3;
+            decimalPoint.style.left = `${(currentPosition + 1) * (100/7)}%`;
+            updateDisplay();
         });
+
+        // Initialisation
+        updateDisplay();
     </script>
 </body>
 </html>
