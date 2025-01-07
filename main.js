@@ -389,4 +389,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         console.log('Lecture arrêtée');
     });
+
+    // Gestionnaire pour le bouton d'enregistrement
+    document.getElementById('btn-save')?.addEventListener('click', () => {
+        const currentPage = canvasManager.getCurrentPage();
+        if (!currentPage) {
+            alert('Aucune page à enregistrer');
+            return;
+        }
+
+        try {
+            // Créer un canvas temporaire pour combiner les calques
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = currentPage.canvas.width;
+            tempCanvas.height = currentPage.canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Dessiner le PDF/image de fond s'il existe
+            if (currentPage.pdfCanvas) {
+                tempCtx.drawImage(currentPage.pdfCanvas, 0, 0);
+            }
+
+            // Dessiner le calque de dessin par-dessus
+            tempCtx.drawImage(currentPage.canvas, 0, 0);
+
+            // Convertir en image et télécharger
+            const link = document.createElement('a');
+            link.download = 'geometrie.png';
+            link.href = tempCanvas.toDataURL('image/png');
+            link.click();
+        } catch (error) {
+            console.error('Erreur lors de l\'enregistrement:', error);
+            alert('Erreur lors de l\'enregistrement de l\'image');
+        }
+    });
 });
