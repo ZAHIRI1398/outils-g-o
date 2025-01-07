@@ -7,10 +7,15 @@
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
+            background-color: #ffa500;
         }
         .container {
             max-width: 900px;
             margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
         .unit-selector {
             margin-bottom: 20px;
@@ -25,6 +30,18 @@
             gap: 10px;
             margin-top: 20px;
             position: relative;
+        }
+        .prefix-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            margin-bottom: -5px;
+        }
+        .prefix-cell {
+            width: 100px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
         }
         .units-row {
             display: flex;
@@ -63,6 +80,13 @@
         .dm { background-color: #ba68c8; }
         .cm { background-color: #f06292; }
         .mm { background-color: #ef5350; }
+        .extra-left input, .extra-right input {
+            background-color: #f5f5f5;
+            border: 1px dashed #ccc;
+        }
+        .extra-left, .extra-right {
+            opacity: 0.7;
+        }
         .decimal-point {
             width: 10px;
             height: 20px;
@@ -90,13 +114,6 @@
             padding: 5px 15px;
             margin: 0 5px;
         }
-        .extra-left input, .extra-right input {
-            background-color: #f5f5f5;
-            border: 1px dashed #ccc;
-        }
-        .extra-left, .extra-right {
-            opacity: 0.7;
-        }
     </style>
 </head>
 <body>
@@ -110,6 +127,19 @@
         </div>
 
         <div class="conversion-table">
+            <div class="prefix-row">
+                <div class="prefix-cell"></div>
+                <div class="prefix-cell"></div>
+                <div class="prefix-cell">kilo</div>
+                <div class="prefix-cell">hecto</div>
+                <div class="prefix-cell">déca</div>
+                <div class="prefix-cell">unité</div>
+                <div class="prefix-cell">déci</div>
+                <div class="prefix-cell">centi</div>
+                <div class="prefix-cell">milli</div>
+                <div class="prefix-cell"></div>
+                <div class="prefix-cell"></div>
+            </div>
             <div class="units-row">
                 <div class="input-cell extra-left"><input type="text" maxlength="1" pattern="[0-9]" /></div>
                 <div class="input-cell extra-left"><input type="text" maxlength="1" pattern="[0-9]" /></div>
@@ -154,7 +184,7 @@
         let currentPosition = 3; // Position initiale (m)
         let isDragging = false;
 
-        // Mise à jour des unités selon le type de mesure
+        // Mise à jour des unités et préfixes selon le type de mesure
         measureType.addEventListener('change', function() {
             const units = {
                 'longueurs': ['km', 'hm', 'dam', 'm', 'dm', 'cm', 'mm'],
@@ -169,7 +199,7 @@
         });
 
         // Gestion du déplacement de la virgule
-        decimalPoint.style.left = `${(currentPosition + 1) * (100/11)}%`;
+        decimalPoint.style.left = `${(currentPosition + 3) * (100/11)}%`;
 
         decimalPoint.addEventListener('mousedown', (e) => {
             isDragging = true;
@@ -220,7 +250,7 @@
         resetBtn.addEventListener('click', () => {
             inputs.forEach(input => input.value = '');
             currentPosition = 3;
-            decimalPoint.style.left = `${(currentPosition + 1) * (100/11)}%`;
+            decimalPoint.style.left = `${(currentPosition + 3) * (100/11)}%`;
         });
     </script>
 </body>
