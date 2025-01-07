@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JeMaths-Zahiri.A</title>
+    <!-- Importation de Bulma CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css"
+    />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+    <link rel="stylesheet" href="style.css" />
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+      // Configuration de PDF.js
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+  </head>
+  <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
+  <body>
+    <!-- En-tête -->
+    <header>
+      <img src="images/logof.png" alt="Logo de mon sitezahiri" id="site-logo" />
+    </header>
+    <!-- Contenu principal -->
+    <div class="container">
+      <!-- Colonne de gauche -->
+      <div class="is-one-quarter left-col">
+        <div class="box">
+          <aside class="menu">
+            <p class="menu-label">Outils Géométriques</p>
+            <ul class="menu-list">
+              <li>
+                <img class="btn-with-image" src="images/navigations/point.png" alt="Point" id="btn-point" style="cursor: pointer;" />
+              </li>
+              <li>
+                <img class="btn-with-image" src="images/navigations/milieu.png" alt="Milieu" id="btn-milieu" style="cursor: pointer;" />
+              </li>
+              <li>
+                <div class="field">
+                  <label class="label"></label>
+                  <div class="control">
+                    <div class="is-flex is-flex-direction-column">
+                      <img class="btn-with-image" src="images/navigations/segment.png" alt="Segment" id="btn-segment" style="cursor: pointer;" />
+                      <img class="btn-with-image" src="images/navigations/regle.png" alt="Segment" id="btn-segment-known" style="cursor: pointer;" />
+                    </div>
+                    <div class="is-flex is-flex-direction-row is-align-items-center mt-2 mb-2">
+        
+                    </div>
+                  </div>
+                </div>
+              </li>
+              <li>
+                <img class="btn-with-image" src="images/navigations/droite.png" alt="Droite" id="btn-droite" style="cursor: pointer;" />
+              </li>
+              <li>
+                <div class="is-flex is-flex-direction-row is-align-items-center mt-2 mb-2">
+                  <img class="btn-with-image" src="images/navigations/parallèle.png" alt="Parallèle" id="btn-parallele" style="cursor: pointer;" />
+                </div>
+              </li>
+              <li>
+                <div class="is-flex is-flex-direction-row is-align-items-center mt-2 mb-2">
+                  <img class="btn-with-image" src="images/navigations/perpendiculaire.png" alt="Perpendiculaire" id="btn-perpendiculaire" style="cursor: pointer;" />
+                </div>
+              </li>
+              <li>
+                <div class="is-flex is-flex-direction-row is-align-items-center mt-2 mb-2">
+                  <img class="btn-with-image" src="images/navigations/angle.png" alt="Angle" id="btn-angle" style="cursor: pointer;" />
+                </div>
+              </li>
+              <li>
+                <div class="field">
+                  <label class="label"></label>
+                  <div class="control">
+                    <div class="is-flex is-flex-direction-column">
+                      <img class="btn-with-image" src="images/navigations/cercle.png" alt="Compas" id="btn-compas" style="cursor: pointer;" />
+                      <img class="btn-with-image" src="images/navigations/compas.png" alt="Compas par rayon" id="btn-compas-known" style="cursor: pointer;" />
+                    </div>
+                    <div class="is-flex is-flex-direction-row is-align-items-center">                 
+                    </div>
+                  </div>
+                </div>
+              </li>
+              <li>
+                <div class="is-flex is-flex-direction-row is-align-items-center mt-2 mb-2">
+                  <img class="btn-with-image" src="images/navigations/polygone.png" alt="Polygone" id="btn-polygon" style="cursor: pointer;" />
+                </div>
+              </li>
+              <li>
+                <img class="btn-with-image" src="images/navigations/gomme.png" alt="Gomme" id="btn-gomme" style="cursor: pointer;" />
+              </li>
+              <li class="nav-item">
+                <img class="btn-with-image" src="images/navigations/fill.png" alt="Remplir" id="btn-fill" style="cursor: pointer;" />
+              </li>
+            </ul>
+            <!-- Ajout du sélecteur de couleurs -->
+            <div class="tool-group">
+                <h3>Couleurs</h3>
+                <div class="color-picker">
+                    <label for="color-picker">Contour:</label>
+                    <input type="color" id="color-picker" value="#000000">
+                </div>
+                <div class="color-picker">
+                    <label for="fill-color-picker">Remplissage:</label>
+                    <input type="color" id="fill-color-picker" value="#ff0000">
+                </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+      <!-- Colonne centrale -->
+      <div class="column">
+        <div class="box" id="center-column">
+          <div id="container1"></div>
+        </div>
+      </div>
+      <!-- Colonne de droite -->
+      <div class="column is-one-quarter">
+        <div class="box">
+          <aside class="menu">
+            <p class="menu-label">Outils Divers</p>
+            <ul class="menu-list">
+              <li>
+                <button class="button is-fullwidth mb-2" id="btn-text">
+                  Écrire Texte
+                </button>
+              </li>
+              <li>
+                <div class="file">
+                  <label class="file-label">
+                    <input
+                      class="file-input"
+                      type="file"
+                      name="pdf"
+                      id="pdf-input"
+                      accept="application/pdf,image/*"
+                    />
+                    <span class="file-cta">
+                      <span class="file-icon">
+                        <i class="fas fa-upload"></i>
+                      </span>
+                      <span class="file-label"> Choisir un fichier… </span>
+                    </span>
+                  </label>
+                </div>
+                <p id="file-name" class="help"></p>
+              </li>
+              <li>
+                <button class="button is-fullwidth mt-2" id="btn-read">
+                  <span class="icon">
+                    <i class="fas fa-volume-up"></i>
+                  </span>
+                  <span>Lire le texte</span>
+                </button>
+              </li>
+              <li>
+                <button class="button is-fullwidth mt-2" id="btn-glisser-nombre">
+                  Glisser Nombre
+                </button>
+              </li>
+              <li>
+                <button class="button is-fullwidth mt-2" id="btn-glisser-mesure">
+                  Glisser Mesure
+                </button>
+              </li>
+              <li>
+                <button class="button is-fullwidth mt-2" id="btn-save">
+                  <span class="icon">
+                    <i class="fas fa-save"></i>
+                  </span>
+                  <span>Enregistrer</span>
+                </button>
+              </li>
+            </ul>
+          </aside>
+        </div>
+      </div>
+    </div>
+    <!-- Popup Glisser Nombre -->
+    <div id="glisser-nombre-popup" class="popup">
+      <span class="close">⬅️ Quitter</span>
+      <iframe
+        src="https://www.openedu.fr/appliquettes/openboard/1_5/glisse_nombre.wgt/index.html"
+        width="100%"
+        height="100%"
+      ></iframe>
+    </div>
+
+    <!-- Popup Glisser Mesure -->
+    <div id="glisser-mesure-popup" class="popup">
+      <span class="close">⬅️ Quitter</span>
+      <iframe
+        src="http://fanch.le.cleach.free.fr/Applications/Maths/glisse_mesure/index.html"
+        width="100%"
+        height="100%"
+      ></iframe>
+    </div>
+    <!-- Conteneur PDF -->
+    <div id="pdf-container" class="container mt-5"></div>
+    <!-- Scripts -->
+    <script type="module" src="main.js"></script>
+    <script
+      defer
+      src="https://use.fontawesome.com/releases/v5.15.4/js/all.js"
+    ></script>
+    
+  </body>
+</html>

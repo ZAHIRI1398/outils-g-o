@@ -1,0 +1,22 @@
+{
+  "name": "hr-app",
+  "version": "1.0.0",
+  "main": "main1.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^32.0.1",
+    "electron-builder": "^25.0.5"
+  },
+  "build": {
+    "appId": "HRapp",
+    "productName": "HR App",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
