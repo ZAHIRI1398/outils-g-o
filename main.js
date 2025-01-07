@@ -341,12 +341,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Ajouter des contrôles de lecture
                 utterance.onstart = () => {
                     console.log(`Début de la lecture de la page ${currentPageIndex + 1}`);
-                    document.getElementById('btn-stop-read').classList.add('is-danger');
+                    const stopButton = document.getElementById('btn-stop-read');
+                    if (stopButton) {
+                        stopButton.classList.add('is-danger');
+                    }
                 };
                 
                 utterance.onend = () => {
                     console.log(`Fin de la lecture de la page ${currentPageIndex + 1}`);
-                    document.getElementById('btn-stop-read').classList.remove('is-danger');
+                    const stopButton = document.getElementById('btn-stop-read');
+                    if (stopButton) {
+                        stopButton.classList.remove('is-danger');
+                    }
                 };
                 
                 utterance.onerror = (event) => {
@@ -355,7 +361,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         console.error('Erreur de lecture:', event);
                         alert('Erreur lors de la lecture du texte');
                     }
-                    document.getElementById('btn-stop-read').classList.remove('is-danger');
+                    const stopButton = document.getElementById('btn-stop-read');
+                    if (stopButton) {
+                        stopButton.classList.remove('is-danger');
+                    }
                 };
 
                 // Lire le texte
@@ -374,7 +383,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Arrêter la lecture en cours
         window.speechSynthesis.cancel();
         // Réinitialiser l'apparence du bouton
-        document.getElementById('btn-stop-read').classList.remove('is-danger');
+        const stopButton = document.getElementById('btn-stop-read');
+        if (stopButton) {
+            stopButton.classList.remove('is-danger');
+        }
         console.log('Lecture arrêtée');
     });
 });
