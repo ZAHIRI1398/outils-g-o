@@ -40,6 +40,22 @@
             border: 1px solid #ccc;
             position: relative;
         }
+        .input-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            position: relative;
+        }
+        .input-cell {
+            width: 100px;
+            text-align: center;
+        }
+        .input-cell input {
+            width: 40px;
+            text-align: center;
+            font-size: 16px;
+            padding: 5px;
+        }
         .km { background-color: #ffb74d; }
         .hm { background-color: #fff176; }
         .dam { background-color: #81c784; }
@@ -47,22 +63,6 @@
         .dm { background-color: #ba68c8; }
         .cm { background-color: #f06292; }
         .mm { background-color: #ef5350; }
-        .number-display {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin-top: 20px;
-            gap: 10px;
-        }
-        .number-input {
-            width: 120px;
-            font-size: 18px;
-            text-align: right;
-            padding: 5px;
-        }
-        .unit-label {
-            font-size: 18px;
-        }
         .decimal-point {
             width: 10px;
             height: 20px;
@@ -71,6 +71,7 @@
             bottom: -25px;
             cursor: pointer;
             transform: translateX(-50%);
+            z-index: 10;
         }
         .decimal-point::before {
             content: ',';
@@ -80,14 +81,6 @@
             font-weight: bold;
             top: -5px;
             left: 2px;
-        }
-        .grid-lines {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            pointer-events: none;
         }
         .controls {
             margin-top: 40px;
@@ -109,11 +102,6 @@
             </select>
         </div>
 
-        <div class="number-display">
-            <input type="number" id="valueInput" class="number-input" step="any">
-            <span class="unit-label" id="unitLabel">km</span>
-        </div>
-
         <div class="conversion-table">
             <div class="units-row">
                 <div class="unit-cell km">km</div>
@@ -123,6 +111,15 @@
                 <div class="unit-cell dm">dm</div>
                 <div class="unit-cell cm">cm</div>
                 <div class="unit-cell mm">mm</div>
+            </div>
+            <div class="input-row">
+                <div class="input-cell"><input type="text" maxlength="1" pattern="[0-9]" id="km" /></div>
+                <div class="input-cell"><input type="text" maxlength="1" pattern="[0-9]" id="hm" /></div>
+                <div class="input-cell"><input type="text" maxlength="1" pattern="[0-9]" id="dam" /></div>
+                <div class="input-cell"><input type="text" maxlength="1" pattern="[0-9]" id="m" /></div>
+                <div class="input-cell"><input type="text" maxlength="1" pattern="[0-9]" id="dm" /></div>
+                <div class="input-cell"><input type="text" maxlength="1" pattern="[0-9]" id="cm" /></div>
+                <div class="input-cell"><input type="text" maxlength="1" pattern="[0-9]" id="mm" /></div>
             </div>
             <div id="decimalPoint" class="decimal-point"></div>
         </div>
@@ -134,11 +131,10 @@
 
     <script>
         const measureType = document.getElementById('measureType');
-        const valueInput = document.getElementById('valueInput');
-        const unitLabel = document.getElementById('unitLabel');
         const decimalPoint = document.getElementById('decimalPoint');
         const resetBtn = document.getElementById('reset');
         const conversionTable = document.querySelector('.conversion-table');
+        const inputs = ['km', 'hm', 'dam', 'm', 'dm', 'cm', 'mm'].map(id => document.getElementById(id));
 
         let currentPosition = 3; // Position initiale (m)
         let isDragging = false;
@@ -155,7 +151,6 @@
             document.querySelectorAll('.unit-cell').forEach((cell, index) => {
                 cell.textContent = selectedUnits[index];
             });
-            unitLabel.textContent = selectedUnits[currentPosition];
         });
 
         // Gestion du déplacement de la virgule
@@ -179,7 +174,6 @@
             if (position !== currentPosition) {
                 currentPosition = position;
                 decimalPoint.style.left = `${(position + 1) * (100/7)}%`;
-                updateDisplay();
             }
         });
 
@@ -187,33 +181,32 @@
             isDragging = false;
         });
 
-        // Mise à jour de l'affichage
-        function updateDisplay() {
-            if (!valueInput.value) return;
+        // Validation des entrées (seulement les chiffres de 0 à 9)
+        inputs.forEach(input => {
+            input.addEventListener('input', function(e) {
+                this.value = this.value.replace(/[^0-9]/g, '');
+                if (this.value.length > 1) {
+                    this.value = this.value.slice(0, 1);
+                }
+            });
 
-            const value = parseFloat(valueInput.value);
-            const units = {
-                'longueurs': ['km', 'hm', 'dam', 'm', 'dm', 'cm', 'mm'],
-                'masses': ['kg', 'hg', 'dag', 'g', 'dg', 'cg', 'mg'],
-                'contenances': ['kL', 'hL', 'daL', 'L', 'dL', 'cL', 'mL']
-            };
-            
-            const selectedUnits = units[measureType.value];
-            unitLabel.textContent = selectedUnits[currentPosition];
-        }
-
-        valueInput.addEventListener('input', updateDisplay);
+            // Passer automatiquement à la case suivante
+            input.addEventListener('keyup', function(e) {
+                if (this.value.length === 1) {
+                    const currentIndex = inputs.indexOf(this);
+                    if (currentIndex < inputs.length - 1) {
+                        inputs[currentIndex + 1].focus();
+                    }
+                }
+            });
+        });
 
         // Réinitialisation
         resetBtn.addEventListener('click', () => {
-            valueInput.value = '';
+            inputs.forEach(input => input.value = '');
             currentPosition = 3;
             decimalPoint.style.left = `${(currentPosition + 1) * (100/7)}%`;
-            updateDisplay();
         });
-
-        // Initialisation
-        updateDisplay();
     </script>
 </body>
 </html>
