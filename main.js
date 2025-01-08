@@ -441,7 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const maxZoom = 3;
     const minZoom = 0.5;
 
-    // Fonction pour obtenir les coordonnées réelles en tenant compte du zoom et du défilement
+    // Fonction pour obtenir les coordonnées réelles en tenant compte du zoom
     function getScaledCoordinates(event, canvas) {
         const rect = canvas.getBoundingClientRect();
         const container = document.getElementById('container1');
@@ -449,12 +449,19 @@ document.addEventListener('DOMContentLoaded', () => {
         // Obtenir le défilement du conteneur
         const scrollLeft = container.scrollLeft;
         const scrollTop = container.scrollTop;
-        
-        // Calculer les coordonnées en tenant compte du zoom et du défilement
-        const x = (event.clientX - rect.left + scrollLeft) / currentZoom;
-        const y = (event.clientY - rect.top + scrollTop) / currentZoom;
-        
-        return { x, y };
+
+        // Calculer les coordonnées en pixels par rapport au canvas
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+
+        // Calculer le ratio entre la taille réelle du canvas et sa taille affichée
+        const displayToRealRatio = canvas.width / (rect.width * currentZoom);
+
+        // Appliquer le ratio et ajouter le défilement
+        return {
+            x: (x * displayToRealRatio) + (scrollLeft * displayToRealRatio),
+            y: (y * displayToRealRatio) + (scrollTop * displayToRealRatio)
+        };
     }
 
     // Fonction pour appliquer le zoom
@@ -462,38 +469,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('container1');
         if (!container) return;
 
-        // Sauvegarder la position de défilement actuelle
+        // Sauvegarder la position de défilement et le point central actuels
         const scrollLeft = container.scrollLeft;
         const scrollTop = container.scrollTop;
+        const centerX = (container.scrollLeft + container.clientWidth / 2) / currentZoom;
+        const centerY = (container.scrollTop + container.clientHeight / 2) / currentZoom;
 
-        // Calculer le ratio de zoom
-        const zoomRatio = zoomLevel / currentZoom;
-
-        // Limiter le zoom
+        // Mettre à jour le zoom
         currentZoom = Math.min(Math.max(zoomLevel, minZoom), maxZoom);
 
         // Appliquer le zoom au conteneur
         container.style.transform = `scale(${currentZoom})`;
         container.style.transformOrigin = 'top left';
 
-        // Ajuster la taille du conteneur pour éviter le débordement
+        // Ajuster la taille du conteneur
         const pages = canvasManager.pages;
         if (pages && pages.length > 0) {
             const baseWidth = pages[0].canvas.width;
             const baseHeight = pages[0].canvas.height;
             container.style.width = `${baseWidth * currentZoom}px`;
             container.style.height = `${baseHeight * currentZoom}px`;
-
-            // Mettre à jour la fonction de calcul des coordonnées dans le CanvasManager
-            pages.forEach(page => {
-                const originalCanvas = page.canvas;
-                originalCanvas.getScaledCoordinates = (event) => getScaledCoordinates(event, originalCanvas);
-            });
         }
 
-        // Ajuster le défilement pour maintenir le point de vue
-        container.scrollLeft = scrollLeft * zoomRatio;
-        container.scrollTop = scrollTop * zoomRatio;
+        // Recentrer sur le même point
+        container.scrollLeft = centerX * currentZoom - container.clientWidth / 2;
+        container.scrollTop = centerY * currentZoom - container.clientHeight / 2;
 
         // Mettre à jour l'échelle des annotations
         updateAnnotationsScale();
@@ -529,15 +529,51 @@ document.addEventListener('DOMContentLoaded', () => {
         const page = this.getCurrentPage();
         if (!page) return;
 
-        const handleEvent = (e, handler) => {
-            e.preventDefault();
-            const coords = canvas.getScaledCoordinates ? canvas.getScaledCoordinates(e) : getScaledCoordinates(e, canvas);
-            handler.call(this, coords.x, coords.y);
-        };
+        canvas.addEventListener('mousedown', (e) => {
+            const coords = getScaledCoordinates(e, canvas);
+            this.handleMouseDown(coords.x, coords.y);
+        });
 
-        canvas.addEventListener('mousedown', (e) => handleEvent(e, this.handleMouseDown));
-        canvas.addEventListener('mousemove', (e) => handleEvent(e, this.handleMouseMove));
-        canvas.addEventListener('mouseup', (e) => handleEvent(e, this.handleMouseUp));
+        canvas.addEventListener('mousemove', (e) => {
+            const coords = getScaledCoordinates(e, canvas);
+            this.handleMouseMove(coords.x, coords.y);
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            const coords = getScaledCoordinates(e, canvas);
+            this.handleMouseUp(coords.x, coords.y);
+        });
+
+        // Empêcher le zoom du navigateur lors de l'utilisation de Ctrl + molette
+        canvas.addEventListener('wheel', (e) => {
+            if (e.ctrlKey) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    };
+
+    // Mettre à jour la fonction de dessin des points pour tenir compte du zoom
+    CanvasManager.prototype.drawPoint = function(x, y, color = 'black', size = 5) {
+        const page = this.getCurrentPage();
+        if (!page) return;
+
+        const ctx = page.canvas.getContext('2d');
+        ctx.beginPath();
+        ctx.arc(x, y, size / currentZoom, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.closePath();
+
+        // Sauvegarder le point dans les annotations
+        page.annotations = page.annotations || [];
+        page.annotations.push({
+            type: 'point',
+            x: x,
+            y: y,
+            color: color,
+            size: size,
+            scale: currentZoom
+        });
     };
 
     // Gestionnaires d'événements pour les boutons de zoom
