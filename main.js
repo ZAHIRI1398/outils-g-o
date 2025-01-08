@@ -269,10 +269,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error('Aucune page à sauvegarder');
             }
 
-            // Créer un nouveau document PDF avec les dimensions de la première page
+            // Définir les marges supplémentaires (en points)
+            const extraMargin = 72; // 1 pouce de chaque côté
+
+            // Créer un nouveau document PDF avec les dimensions augmentées
             const firstPage = pages[0];
             const pdfDimensions = {
-                width: firstPage.canvas.width / 96 * 72, // Convertir pixels en points (72 points = 1 pouce)
+                width: (firstPage.canvas.width / 96 * 72) + (extraMargin * 2), // Ajouter les marges
                 height: firstPage.canvas.height / 96 * 72
             };
 
@@ -291,10 +294,29 @@ document.addEventListener('DOMContentLoaded', () => {
                     pdf.addPage([pdfDimensions.width, pdfDimensions.height]);
                 }
 
-                // Convertir le canvas en image
-                const imgData = page.canvas.toDataURL('image/jpeg', 1.0);
+                // Créer un canvas temporaire avec la largeur augmentée
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = page.canvas.width + ((extraMargin * 2) * (96/72)); // Convertir les points en pixels
+                tempCanvas.height = page.canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+
+                // Remplir le fond en blanc
+                tempCtx.fillStyle = '#FFFFFF';
+                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+                // Copier le contenu du canvas original au centre
+                tempCtx.drawImage(
+                    page.canvas, 
+                    (extraMargin * 96/72), // Position X avec marge
+                    0, // Position Y
+                    page.canvas.width,
+                    page.canvas.height
+                );
+
+                // Convertir le canvas temporaire en image
+                const imgData = tempCanvas.toDataURL('image/jpeg', 1.0);
                 
-                // Ajouter l'image au PDF avec les dimensions exactes
+                // Ajouter l'image au PDF
                 pdf.addImage(imgData, 'JPEG', 0, 0, pdfDimensions.width, pdfDimensions.height, '', 'FAST');
             }
 
