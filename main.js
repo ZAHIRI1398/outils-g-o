@@ -450,22 +450,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const maxZoom = 3;
     const minZoom = 0.5;
 
-    // Fonction pour obtenir les coordonnées réelles en tenant compte du zoom
+    // Fonction pour obtenir les coordonnées réelles en tenant compte du zoom et du défilement
     function getScaledCoordinates(event, canvas) {
         const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
+        const container = document.getElementById('container1');
         
-        return {
-            x: (event.clientX - rect.left) * scaleX / currentZoom,
-            y: (event.clientY - rect.top) * scaleY / currentZoom
-        };
+        // Obtenir le défilement du conteneur
+        const scrollLeft = container.scrollLeft;
+        const scrollTop = container.scrollTop;
+        
+        // Calculer les coordonnées en tenant compte du zoom et du défilement
+        const x = (event.clientX - rect.left + scrollLeft) / currentZoom;
+        const y = (event.clientY - rect.top + scrollTop) / currentZoom;
+        
+        return { x, y };
     }
 
     // Fonction pour appliquer le zoom
     function applyZoom(zoomLevel) {
         const container = document.getElementById('container1');
         if (!container) return;
+
+        // Sauvegarder la position de défilement actuelle
+        const scrollLeft = container.scrollLeft;
+        const scrollTop = container.scrollTop;
+
+        // Calculer le ratio de zoom
+        const zoomRatio = zoomLevel / currentZoom;
 
         // Limiter le zoom
         currentZoom = Math.min(Math.max(zoomLevel, minZoom), maxZoom);
@@ -488,6 +499,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 originalCanvas.getScaledCoordinates = (event) => getScaledCoordinates(event, originalCanvas);
             });
         }
+
+        // Ajuster le défilement pour maintenir le point de vue
+        container.scrollLeft = scrollLeft * zoomRatio;
+        container.scrollTop = scrollTop * zoomRatio;
 
         // Mettre à jour l'échelle des annotations
         updateAnnotationsScale();
@@ -519,34 +534,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Modifier la classe CanvasManager pour utiliser les coordonnées mises à l'échelle
-    const originalAddEventListeners = CanvasManager.prototype.addEventListeners;
     CanvasManager.prototype.addEventListeners = function(canvas) {
         const page = this.getCurrentPage();
         if (!page) return;
 
-        canvas.addEventListener('mousedown', (e) => {
-            const coords = canvas.getScaledCoordinates ? canvas.getScaledCoordinates(e) : { 
-                x: e.offsetX / currentZoom, 
-                y: e.offsetY / currentZoom 
-            };
-            this.handleMouseDown(coords.x, coords.y);
-        });
+        const handleEvent = (e, handler) => {
+            e.preventDefault();
+            const coords = canvas.getScaledCoordinates ? canvas.getScaledCoordinates(e) : getScaledCoordinates(e, canvas);
+            handler.call(this, coords.x, coords.y);
+        };
 
-        canvas.addEventListener('mousemove', (e) => {
-            const coords = canvas.getScaledCoordinates ? canvas.getScaledCoordinates(e) : { 
-                x: e.offsetX / currentZoom, 
-                y: e.offsetY / currentZoom 
-            };
-            this.handleMouseMove(coords.x, coords.y);
-        });
-
-        canvas.addEventListener('mouseup', (e) => {
-            const coords = canvas.getScaledCoordinates ? canvas.getScaledCoordinates(e) : { 
-                x: e.offsetX / currentZoom, 
-                y: e.offsetY / currentZoom 
-            };
-            this.handleMouseUp(coords.x, coords.y);
-        });
+        canvas.addEventListener('mousedown', (e) => handleEvent(e, this.handleMouseDown));
+        canvas.addEventListener('mousemove', (e) => handleEvent(e, this.handleMouseMove));
+        canvas.addEventListener('mouseup', (e) => handleEvent(e, this.handleMouseUp));
     };
 
     // Gestionnaires d'événements pour les boutons de zoom
