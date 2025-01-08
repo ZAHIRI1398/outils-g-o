@@ -391,8 +391,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Gestionnaire pour le bouton d'enregistrement
-    document.getElementById('btn-save')?.addEventListener('click', async () => {
+    const saveButton = document.getElementById('btn-save');
+    console.log('Bouton save trouvé:', saveButton);
+    
+    saveButton?.addEventListener('click', async () => {
+        console.log('Clic sur le bouton save');
         try {
+            console.log('Nombre de pages:', canvasManager.pages.length);
             // Créer un nouveau document PDF
             const pdf = new jsPDF({
                 orientation: 'p',
