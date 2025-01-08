@@ -450,6 +450,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const maxZoom = 3;
     const minZoom = 0.5;
 
+    // Fonction pour obtenir les coordonnées réelles en tenant compte du zoom
+    function getScaledCoordinates(event, canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        return {
+            x: (event.clientX - rect.left) * scaleX / currentZoom,
+            y: (event.clientY - rect.top) * scaleY / currentZoom
+        };
+    }
+
     // Fonction pour appliquer le zoom
     function applyZoom(zoomLevel) {
         const container = document.getElementById('container1');
@@ -469,6 +481,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const baseHeight = pages[0].canvas.height;
             container.style.width = `${baseWidth * currentZoom}px`;
             container.style.height = `${baseHeight * currentZoom}px`;
+
+            // Mettre à jour la fonction de calcul des coordonnées dans le CanvasManager
+            pages.forEach(page => {
+                const originalCanvas = page.canvas;
+                originalCanvas.getScaledCoordinates = (event) => getScaledCoordinates(event, originalCanvas);
+            });
         }
 
         // Mettre à jour l'échelle des annotations
@@ -499,6 +517,37 @@ document.addEventListener('DOMContentLoaded', () => {
         // Redessiner toutes les pages
         canvasManager.redrawAll();
     }
+
+    // Modifier la classe CanvasManager pour utiliser les coordonnées mises à l'échelle
+    const originalAddEventListeners = CanvasManager.prototype.addEventListeners;
+    CanvasManager.prototype.addEventListeners = function(canvas) {
+        const page = this.getCurrentPage();
+        if (!page) return;
+
+        canvas.addEventListener('mousedown', (e) => {
+            const coords = canvas.getScaledCoordinates ? canvas.getScaledCoordinates(e) : { 
+                x: e.offsetX / currentZoom, 
+                y: e.offsetY / currentZoom 
+            };
+            this.handleMouseDown(coords.x, coords.y);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const coords = canvas.getScaledCoordinates ? canvas.getScaledCoordinates(e) : { 
+                x: e.offsetX / currentZoom, 
+                y: e.offsetY / currentZoom 
+            };
+            this.handleMouseMove(coords.x, coords.y);
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            const coords = canvas.getScaledCoordinates ? canvas.getScaledCoordinates(e) : { 
+                x: e.offsetX / currentZoom, 
+                y: e.offsetY / currentZoom 
+            };
+            this.handleMouseUp(coords.x, coords.y);
+        });
+    };
 
     // Gestionnaires d'événements pour les boutons de zoom
     document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
