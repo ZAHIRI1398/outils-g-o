@@ -211,6 +211,8 @@ button.active {
     min-height: 500px;
     overflow: auto;
     padding: 1rem;
+    transition: transform 0.2s ease-out;
+    transform-origin: top left;
 }
 
 #container1 canvas {
@@ -450,4 +452,23 @@ button.active {
 
 #apply-number:hover, #apply-measure:hover {
     background-color: #45a049;
+}
+
+/* Styles pour le zoom */
+.buttons.has-addons .button {
+    margin: 0;
+}
+
+.buttons.has-addons .button:not(:last-child) {
+    margin-right: -1px;
+    border-right: none;
+}
+.buttons.has-addons .button:first-child {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.buttons.has-addons .button:last-child {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
 }

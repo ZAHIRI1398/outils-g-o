@@ -443,4 +443,82 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Erreur lors de l\'enregistrement du PDF');
         }
     });
+
+    // Variables pour le zoom
+    let currentZoom = 1;
+    const zoomStep = 0.1;
+    const maxZoom = 3;
+    const minZoom = 0.5;
+
+    // Fonction pour appliquer le zoom
+    function applyZoom(zoomLevel) {
+        const container = document.getElementById('container1');
+        if (!container) return;
+
+        // Limiter le zoom
+        currentZoom = Math.min(Math.max(zoomLevel, minZoom), maxZoom);
+
+        // Appliquer le zoom au conteneur
+        container.style.transform = `scale(${currentZoom})`;
+        container.style.transformOrigin = 'top left';
+
+        // Ajuster la taille du conteneur pour éviter le débordement
+        const pages = canvasManager.pages;
+        if (pages && pages.length > 0) {
+            const baseWidth = pages[0].canvas.width;
+            const baseHeight = pages[0].canvas.height;
+            container.style.width = `${baseWidth * currentZoom}px`;
+            container.style.height = `${baseHeight * currentZoom}px`;
+        }
+
+        // Mettre à jour l'échelle des annotations
+        updateAnnotationsScale();
+    }
+
+    // Fonction pour mettre à jour l'échelle des annotations
+    function updateAnnotationsScale() {
+        const pages = canvasManager.pages;
+        if (!pages) return;
+
+        pages.forEach(page => {
+            if (page.annotations) {
+                page.annotations.forEach(annotation => {
+                    // Mettre à jour la position et la taille des annotations
+                    if (annotation.scale !== currentZoom) {
+                        const scaleRatio = currentZoom / (annotation.scale || 1);
+                        annotation.x *= scaleRatio;
+                        annotation.y *= scaleRatio;
+                        if (annotation.width) annotation.width *= scaleRatio;
+                        if (annotation.height) annotation.height *= scaleRatio;
+                        annotation.scale = currentZoom;
+                    }
+                });
+            }
+        });
+
+        // Redessiner toutes les pages
+        canvasManager.redrawAll();
+    }
+
+    // Gestionnaires d'événements pour les boutons de zoom
+    document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
+        applyZoom(currentZoom + zoomStep);
+    });
+
+    document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
+        applyZoom(currentZoom - zoomStep);
+    });
+
+    document.getElementById('btn-zoom-reset')?.addEventListener('click', () => {
+        applyZoom(1);
+    });
+
+    // Ajouter le support du zoom avec la molette de la souris en maintenant Ctrl
+    document.addEventListener('wheel', (e) => {
+        if (e.ctrlKey) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -zoomStep : zoomStep;
+            applyZoom(currentZoom + delta);
+        }
+    }, { passive: false });
 });
