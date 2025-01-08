@@ -270,7 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Définir les marges supplémentaires (en points)
-            const extraMargin = 72; // 1 pouce de chaque côté
+            const extraMargin = 144; // 2 pouces de chaque côté (72 points * 2)
 
             // Créer un nouveau document PDF avec les dimensions augmentées
             const firstPage = pages[0];
