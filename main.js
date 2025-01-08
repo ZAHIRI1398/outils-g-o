@@ -391,36 +391,51 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Gestionnaire pour le bouton d'enregistrement
-    document.getElementById('btn-save')?.addEventListener('click', () => {
-        const currentPage = canvasManager.getCurrentPage();
-        if (!currentPage) {
-            alert('Aucune page à enregistrer');
-            return;
-        }
-
+    document.getElementById('btn-save')?.addEventListener('click', async () => {
         try {
-            // Créer un canvas temporaire pour combiner les calques
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = currentPage.canvas.width;
-            tempCanvas.height = currentPage.canvas.height;
-            const tempCtx = tempCanvas.getContext('2d');
+            // Créer un nouveau document PDF
+            const pdf = new jsPDF({
+                orientation: 'p',
+                unit: 'px',
+                format: [canvasManager.pages[0].canvas.width, canvasManager.pages[0].canvas.height]
+            });
 
-            // Dessiner le PDF/image de fond s'il existe
-            if (currentPage.pdfCanvas) {
-                tempCtx.drawImage(currentPage.pdfCanvas, 0, 0);
+            // Pour chaque page
+            for (let i = 0; i < canvasManager.pages.length; i++) {
+                const page = canvasManager.pages[i];
+                
+                // Créer un canvas temporaire pour combiner les calques
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = page.canvas.width;
+                tempCanvas.height = page.canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+
+                // Dessiner le PDF/image de fond s'il existe
+                if (page.pdfCanvas) {
+                    tempCtx.drawImage(page.pdfCanvas, 0, 0);
+                }
+
+                // Dessiner le calque de dessin par-dessus
+                tempCtx.drawImage(page.canvas, 0, 0);
+
+                // Convertir le canvas en image
+                const imgData = tempCanvas.toDataURL('image/jpeg', 1.0);
+
+                // Ajouter une nouvelle page si ce n'est pas la première
+                if (i > 0) {
+                    pdf.addPage();
+                }
+
+                // Ajouter l'image à la page
+                pdf.addImage(imgData, 'JPEG', 0, 0, tempCanvas.width, tempCanvas.height);
             }
 
-            // Dessiner le calque de dessin par-dessus
-            tempCtx.drawImage(currentPage.canvas, 0, 0);
+            // Sauvegarder le PDF
+            pdf.save('geometrie_avec_annotations.pdf');
 
-            // Convertir en image et télécharger
-            const link = document.createElement('a');
-            link.download = 'geometrie.png';
-            link.href = tempCanvas.toDataURL('image/png');
-            link.click();
         } catch (error) {
             console.error('Erreur lors de l\'enregistrement:', error);
-            alert('Erreur lors de l\'enregistrement de l\'image');
+            alert('Erreur lors de l\'enregistrement du PDF');
         }
     });
 });
