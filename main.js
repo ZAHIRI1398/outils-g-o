@@ -190,12 +190,12 @@ class CanvasManager {
             this.redrawShapes(pageNumber);
             return;
         } else if (this.currentTool === 'eraser') {
-            const shapeIndex = this.findShapeAtPoint(point, pageNumber);
-            if (shapeIndex !== -1) {
-                const shapes = this.shapes.get(pageNumber);
-                shapes.splice(shapeIndex, 1);
-                this.shapes.set(pageNumber, shapes);
-                this.redrawShapes(pageNumber);
+            console.log('Tentative d\'effacement à:', x, y); // Debug
+            const shapeFound = this.findShapeAtPoint(point, pageNumber);
+            if (shapeFound) {
+                console.log('Forme effacée'); // Debug
+            } else {
+                console.log('Aucune forme trouvée à cet endroit'); // Debug
             }
             return;
         } else if (this.currentTool === 'writeText') {
@@ -759,13 +759,21 @@ class CanvasManager {
 
     findShapeAtPoint(point, pageNumber) {
         const shapes = this.shapes.get(pageNumber) || [];
+        // Parcourir les formes dans l'ordre inverse pour trouver la plus récente
         for (let i = shapes.length - 1; i >= 0; i--) {
             const shape = shapes[i];
+            console.log('Vérification de la forme:', shape.type); // Debug
             if (this.isPointInShape(point, shape)) {
-                return i;
+                console.log('Forme trouvée:', shape.type); // Debug
+                // Supprimer la forme
+                shapes.splice(i, 1);
+                this.shapes.set(pageNumber, shapes);
+                // Redessiner le canvas
+                this.redrawShapes(pageNumber);
+                return true;
             }
         }
-        return -1;
+        return false;
     }
 
     findTextAtPoint(point, pageNumber) {
