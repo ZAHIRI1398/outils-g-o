@@ -799,8 +799,17 @@ class CanvasManager {
                 return distance <= this.eraserRadius;
             
             case 'line':
-            case 'measure':  
-                return this.isPointNearLine(point, shape.start, shape.end);
+            case 'measure':  // Support pour les lignes de mesure
+                const lineDistance = this.isPointNearLine(point, shape.start, shape.end);
+                if (shape.type === 'measure' && shape.measurePoint) {
+                    // Vérifier aussi le point de mesure pour les lignes mesurées
+                    const measureDistance = Math.sqrt(
+                        Math.pow(point.x - shape.measurePoint.x, 2) +
+                        Math.pow(point.y - shape.measurePoint.y, 2)
+                    );
+                    return lineDistance || measureDistance <= this.eraserRadius;
+                }
+                return lineDistance;
             
             case 'circle':
                 const center = shape.start;
