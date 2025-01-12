@@ -125,6 +125,8 @@ class CanvasManager {
         const y = event.clientY - rect.top;
         const point = { x, y };
 
+        console.log('Outil actuel:', this.currentTool, 'Position:', x, y);
+
         if (this.currentTool === 'midpoint') {
             // Pour l'outil milieu, on cherche la ligne la plus proche
             const nearestLine = this.findNearestLine(point, pageNumber);
@@ -190,12 +192,13 @@ class CanvasManager {
             this.redrawShapes(pageNumber);
             return;
         } else if (this.currentTool === 'eraser') {
-            console.log('Tentative d\'effacement à:', x, y); // Debug
+            console.log('Tentative d\'effacement à:', x, y);
+            console.log('Formes disponibles:', this.shapes.get(pageNumber));
             const shapeFound = this.findShapeAtPoint(point, pageNumber);
             if (shapeFound) {
-                console.log('Forme effacée'); // Debug
+                console.log('Forme effacée');
             } else {
-                console.log('Aucune forme trouvée à cet endroit'); // Debug
+                console.log('Aucune forme trouvée à cet endroit');
             }
             return;
         } else if (this.currentTool === 'writeText') {
@@ -759,15 +762,22 @@ class CanvasManager {
 
     findShapeAtPoint(point, pageNumber) {
         const shapes = this.shapes.get(pageNumber) || [];
+        console.log('Recherche de forme à la position:', point);
+        console.log('Nombre de formes sur la page:', shapes.length);
+        
         // Parcourir les formes dans l'ordre inverse pour trouver la plus récente
         for (let i = shapes.length - 1; i >= 0; i--) {
             const shape = shapes[i];
-            console.log('Vérification de la forme:', shape.type); // Debug
+            console.log('Vérification de la forme:', shape.type, 'index:', i);
+            
             if (this.isPointInShape(point, shape)) {
-                console.log('Forme trouvée:', shape.type); // Debug
+                console.log('Forme trouvée:', shape.type, 'à l\'index:', i);
+                console.log('Détails de la forme:', JSON.stringify(shape));
+                
                 // Supprimer la forme
                 shapes.splice(i, 1);
                 this.shapes.set(pageNumber, shapes);
+                
                 // Redessiner le canvas
                 this.redrawShapes(pageNumber);
                 return true;
@@ -798,6 +808,13 @@ class CanvasManager {
     }
 
     isPointInShape(point, shape) {
+        if (!shape || !shape.type) {
+            console.log('Forme invalide:', shape);
+            return false;
+        }
+
+        console.log('Test de la forme:', shape.type);
+        
         switch (shape.type) {
             case 'point':
                 const distance = Math.sqrt(
@@ -808,13 +825,14 @@ class CanvasManager {
             
             case 'line':
             case 'measure':  // Support pour les lignes de mesure
+                console.log('Test de ligne/mesure:', shape);
                 const lineDistance = this.isPointNearLine(point, shape.start, shape.end);
                 if (shape.type === 'measure' && shape.measurePoint) {
-                    // Vérifier aussi le point de mesure pour les lignes mesurées
                     const measureDistance = Math.sqrt(
                         Math.pow(point.x - shape.measurePoint.x, 2) +
                         Math.pow(point.y - shape.measurePoint.y, 2)
                     );
+                    console.log('Distance à la ligne:', lineDistance, 'Distance au point de mesure:', measureDistance);
                     return lineDistance || measureDistance <= this.eraserRadius;
                 }
                 return lineDistance;
