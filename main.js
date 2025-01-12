@@ -897,37 +897,39 @@ class CanvasManager {
     }
 
     isPointNearLine(point, start, end) {
-        const A = point.x - start.x;
-        const B = point.y - start.y;
-        const C = end.x - start.x;
-        const D = end.y - start.y;
-        
-        const dot = A * C + B * D;
-        const lenSq = C * C + D * D;
-        let param = -1;
-        
-        if (lenSq !== 0) {
-            param = dot / lenSq;
+        console.log('Vérification de la proximité du point:', point);
+        console.log('avec la ligne:', { start, end });
+
+        // Vecteur de la ligne
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+
+        // Si la ligne est trop courte, on considère que c'est un point
+        if (length < 1) {
+            const distance = Math.sqrt(
+                Math.pow(point.x - start.x, 2) +
+                Math.pow(point.y - start.y, 2)
+            );
+            console.log('Ligne trop courte, distance au point:', distance);
+            return distance <= this.eraserRadius;
         }
+
+        // Calculer la distance du point à la ligne
+        const cross = (point.x - start.x) * dy - (point.y - start.y) * dx;
+        const distance = Math.abs(cross / length);
+
+        // Calculer la projection du point sur la ligne
+        const t = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
+
+        console.log('Distance à la ligne:', distance);
+        console.log('Position relative sur la ligne (t):', t);
+
+        // Le point doit être proche de la ligne et entre ses extrémités
+        const isNearLine = distance <= this.eraserRadius && t >= 0 && t <= 1;
+        console.log('Est proche de la ligne:', isNearLine);
         
-        let xx, yy;
-        
-        if (param < 0) {
-            xx = start.x;
-            yy = start.y;
-        } else if (param > 1) {
-            xx = end.x;
-            yy = end.y;
-        } else {
-            xx = start.x + param * C;
-            yy = start.y + param * D;
-        }
-        
-        const dx = point.x - xx;
-        const dy = point.y - yy;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        return distance <= this.eraserRadius;
+        return isNearLine;
     }
 
     isPointInPolygon(point, points) {
