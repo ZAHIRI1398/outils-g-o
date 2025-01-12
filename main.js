@@ -790,7 +790,7 @@ class CanvasManager {
         const shapes = this.shapes.get(pageNumber) || [];
         for (const shape of shapes) {
             if (shape.type === 'text') {
-                const context = this.drawingLayers.get(pageNumber).context;
+                const context = this.drawingLayers.get(1).context;
                 context.font = `${shape.fontSize}px Arial`;
                 const metrics = context.measureText(shape.text);
                 const height = shape.fontSize; // Approximation de la hauteur
@@ -849,6 +849,17 @@ class CanvasManager {
                 );
                 return Math.abs(distanceToCenter - radius) <= this.eraserRadius;
             
+            case 'polygon':
+                const polygonPoints = this.calculatePolygonPoints(shape);
+                return this.isPointNearPolygonEdges(point, polygonPoints);
+            
+            case 'freepolygon':
+                if (!shape.points || !Array.isArray(shape.points)) {
+                    console.log('Points de polygone invalides:', shape.points);
+                    return false;
+                }
+                return this.isPointNearPolygonEdges(point, shape.points);
+            
             case 'text':
                 const context = this.drawingLayers.get(1).context;
                 context.font = `${shape.fontSize}px Arial`;
@@ -864,96 +875,64 @@ class CanvasManager {
                 );
                 return textDistance <= this.eraserRadius;
             
-            case 'polygon':
-            case 'freepolygon':
-                const points = shape.type === 'polygon' ? 
-                    this.calculatePolygonPoints(shape) : 
-                    shape.points;
-                return this.isPointInPolygon(point, points);
-            
             default:
                 return false;
         }
     }
 
-    calculatePolygonPoints(shape) {
-        const sideLength = Math.sqrt(
-            Math.pow(shape.end.x - shape.start.x, 2) +
-            Math.pow(shape.end.y - shape.start.y, 2)
-        );
+    isPointNearPolygonEdges(point, points) {
+        if (!points || points.length < 2) return false;
         
-        const baseAngle = Math.atan2(shape.end.y - shape.start.y, shape.end.x - shape.start.x);
-        const points = [shape.start];
-        const angleStep = (2 * Math.PI) / shape.sides;
-        
-        for (let i = 1; i < shape.sides; i++) {
-            const angle = baseAngle + i * angleStep;
-            const x = points[i-1].x + sideLength * Math.cos(angle);
-            const y = points[i-1].y + sideLength * Math.sin(angle);
-            points.push({ x, y });
-        }
-        
-        return points;
-    }
-
-    isPointNearLine(point, start, end) {
-        console.log('Vérification de la proximité du point:', point);
-        console.log('avec la ligne:', { start, end });
-
-        // Vecteur de la ligne
-        const dx = end.x - start.x;
-        const dy = end.y - start.y;
-        const length = Math.sqrt(dx * dx + dy * dy);
-
-        // Si la ligne est trop courte, on considère que c'est un point
-        if (length < 1) {
-            const distance = Math.sqrt(
-                Math.pow(point.x - start.x, 2) +
-                Math.pow(point.y - start.y, 2)
-            );
-            console.log('Ligne trop courte, distance au point:', distance);
-            return distance <= this.eraserRadius;
-        }
-
-        // Calculer la distance du point à la ligne
-        const cross = (point.x - start.x) * dy - (point.y - start.y) * dx;
-        const distance = Math.abs(cross / length);
-
-        // Calculer la projection du point sur la ligne
-        const t = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
-
-        console.log('Distance à la ligne:', distance);
-        console.log('Position relative sur la ligne (t):', t);
-
-        // Le point doit être proche de la ligne et entre ses extrémités
-        const isNearLine = distance <= this.eraserRadius && t >= 0 && t <= 1;
-        console.log('Est proche de la ligne:', isNearLine);
-        
-        return isNearLine;
-    }
-
-    isPointInPolygon(point, points) {
-        // D'abord vérifier si le point est près d'un des segments
+        // Vérifier chaque arête du polygone
         for (let i = 0; i < points.length; i++) {
             const start = points[i];
             const end = points[(i + 1) % points.length];
+            
+            if (!start || !end) continue;
+            
+            // Utiliser isPointNearLine pour vérifier la proximité avec chaque arête
             if (this.isPointNearLine(point, start, end)) {
                 return true;
             }
         }
+        return false;
+    }
 
-        // Ensuite vérifier si le point est à l'intérieur du polygone
-        let inside = false;
-        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-            const xi = points[i].x, yi = points[i].y;
-            const xj = points[j].x, yj = points[j].y;
-            
-            const intersect = ((yi > point.y) !== (yj > point.y))
-                && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
-            if (intersect) inside = !inside;
+    isPointNearLine(point, lineStart, lineEnd) {
+        // Calcul de la distance d'un point à une ligne
+        const A = point.x - lineStart.x;
+        const B = point.y - lineStart.y;
+        const C = lineEnd.x - lineStart.x;
+        const D = lineEnd.y - lineStart.y;
+
+        const dot = A * C + B * D;
+        const len_sq = C * C + D * D;
+
+        // Paramètre pour la projection du point sur la ligne
+        let param = -1;
+        if (len_sq != 0) {
+            param = dot / len_sq;
         }
-        
-        return inside;
+
+        let xx, yy;
+
+        if (param < 0) {
+            xx = lineStart.x;
+            yy = lineStart.y;
+        } else if (param > 1) {
+            xx = lineEnd.x;
+            yy = lineEnd.y;
+        } else {
+            xx = lineStart.x + param * C;
+            yy = lineStart.y + param * D;
+        }
+
+        const dx = point.x - xx;
+        const dy = point.y - yy;
+
+        // Calcul de la distance finale
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        return distance <= this.eraserRadius;
     }
 
     async loadPDF(file) {
@@ -964,7 +943,7 @@ class CanvasManager {
             const arrayBuffer = await file.arrayBuffer();
             console.log('Fichier converti en ArrayBuffer');
             
-            this.pdfDoc = await pdfjsLib.getDocument(arrayBuffer).promise;
+            this.pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             console.log('PDF chargé avec', this.pdfDoc.numPages, 'pages');
             
             this.totalPagesSpan.textContent = this.pdfDoc.numPages;
@@ -1021,7 +1000,7 @@ class CanvasManager {
                 canvasContext: context,
                 viewport: viewport
             }).promise;
-
+            
             // Créer le layer de dessin pour cette page
             this.createDrawingLayer(pageNumber, pageContainer);
             
@@ -1032,7 +1011,7 @@ class CanvasManager {
         }
     }
 
-    async goToPage(pageNumber) {
+    goToPage(pageNumber) {
         if (!this.pdfDoc) return;
         
         pageNumber = Math.max(1, Math.min(pageNumber, this.pdfDoc.numPages));
@@ -1044,7 +1023,7 @@ class CanvasManager {
         }
     }
 
-    async zoom(delta) {
+    zoom(delta) {
         if (!this.pdfDoc) return;
 
         const newScale = Math.max(0.5, Math.min(3, this.currentScale + delta));
@@ -1071,7 +1050,7 @@ class CanvasManager {
 
         for (let i = 0; i < pages.length; i++) {
             const pageNumber = i + 1;
-            const page = await this.pdfDoc.getPage(pageNumber);
+            const page = this.pdfDoc.getPage(pageNumber);
             const viewport = page.getViewport({ scale: this.currentScale });
             
             // Mettre à jour le canvas PDF
@@ -1082,48 +1061,48 @@ class CanvasManager {
             
             // Redessiner le PDF
             const context = canvas.getContext('2d');
-            await page.render({
+            page.render({
                 canvasContext: context,
                 viewport: viewport
-            }).promise;
-
-            // Recréer le layer de dessin
-            const drawingCanvas = pageContainer.getElementsByClassName('drawing-layer')[0];
-            drawingCanvas.width = viewport.width;
-            drawingCanvas.height = viewport.height;
-            
-            const drawingContext = drawingCanvas.getContext('2d');
-            this.drawingLayers.set(pageNumber, {
-                canvas: drawingCanvas,
-                context: drawingContext
-            });
-
-            // Restaurer les formes avec les nouvelles coordonnées mises à l'échelle
-            if (allShapes.has(pageNumber)) {
-                const scaleRatio = newScale / oldScale;
-                const shapes = allShapes.get(pageNumber).map(shape => {
-                    const scaledShape = { ...shape };
-
-                    if (shape.type === 'point') {
-                        scaledShape.start = this.scalePoint(shape.start, scaleRatio);
-                    } else if (shape.type === 'line' || shape.type === 'circle') {
-                        scaledShape.start = this.scalePoint(shape.start, scaleRatio);
-                        scaledShape.end = this.scalePoint(shape.end, scaleRatio);
-                    } else if (shape.type === 'polygon') {
-                        scaledShape.start = this.scalePoint(shape.start, scaleRatio);
-                        scaledShape.end = this.scalePoint(shape.end, scaleRatio);
-                    } else if (shape.type === 'freepolygon') {
-                        scaledShape.points = shape.points.map(p => this.scalePoint(p, scaleRatio));
-                    } else if (shape.type === 'text') {
-                        scaledShape.x = shape.x * scaleRatio;
-                        scaledShape.y = shape.y * scaleRatio;
-                    }
-
-                    return scaledShape;
+            }).promise.then(() => {
+                // Recréer le layer de dessin
+                const drawingCanvas = pageContainer.getElementsByClassName('drawing-layer')[0];
+                drawingCanvas.width = viewport.width;
+                drawingCanvas.height = viewport.height;
+                
+                const drawingContext = drawingCanvas.getContext('2d');
+                this.drawingLayers.set(pageNumber, {
+                    canvas: drawingCanvas,
+                    context: drawingContext
                 });
-                this.shapes.set(pageNumber, shapes);
-                this.redrawShapes(pageNumber);
-            }
+
+                // Restaurer les formes avec les nouvelles coordonnées mises à l'échelle
+                if (allShapes.has(pageNumber)) {
+                    const scaleRatio = newScale / oldScale;
+                    const shapes = allShapes.get(pageNumber).map(shape => {
+                        const scaledShape = { ...shape };
+
+                        if (shape.type === 'point') {
+                            scaledShape.start = this.scalePoint(shape.start, scaleRatio);
+                        } else if (shape.type === 'line' || shape.type === 'circle') {
+                            scaledShape.start = this.scalePoint(shape.start, scaleRatio);
+                            scaledShape.end = this.scalePoint(shape.end, scaleRatio);
+                        } else if (shape.type === 'polygon') {
+                            scaledShape.start = this.scalePoint(shape.start, scaleRatio);
+                            scaledShape.end = this.scalePoint(shape.end, scaleRatio);
+                        } else if (shape.type === 'freepolygon') {
+                            scaledShape.points = shape.points.map(p => this.scalePoint(p, scaleRatio));
+                        } else if (shape.type === 'text') {
+                            scaledShape.x = shape.x * scaleRatio;
+                            scaledShape.y = shape.y * scaleRatio;
+                        }
+
+                        return scaledShape;
+                    });
+                    this.shapes.set(pageNumber, shapes);
+                    this.redrawShapes(pageNumber);
+                }
+            });
         }
     }
 
@@ -1134,7 +1113,7 @@ class CanvasManager {
         };
     }
 
-    async savePDF() {
+    savePDF() {
         if (!this.pdfDoc || !this.currentFile) {
             console.error('Aucun PDF ouvert');
             return;
@@ -1142,8 +1121,8 @@ class CanvasManager {
 
         try {
             // Charger le PDF original avec pdf-lib
-            const pdfBytes = await this.currentFile.arrayBuffer();
-            const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+            const pdfBytes = this.currentFile.arrayBuffer();
+            const pdfDoc = PDFLib.PDFDocument.load(pdfBytes);
             
             // Pour chaque page
             for (let pageNum = 1; pageNum <= this.pdfDoc.numPages; pageNum++) {
@@ -1151,8 +1130,8 @@ class CanvasManager {
                 if (!drawingLayer) continue;
 
                 // Convertir le canvas en PNG
-                const imageBytes = await new Promise(resolve => {
-                    drawingLayer.canvas.toBlob(async blob => {
+                const imageBytes = new Promise(resolve => {
+                    drawingLayer.canvas.toBlob(blob => {
                         const reader = new FileReader();
                         reader.onloadend = () => resolve(new Uint8Array(reader.result));
                         reader.readAsArrayBuffer(blob);
@@ -1160,7 +1139,7 @@ class CanvasManager {
                 });
 
                 // Incorporer l'image PNG dans le PDF
-                const image = await pdfDoc.embedPng(imageBytes);
+                const image = pdfDoc.embedPng(imageBytes);
                 
                 // Obtenir la page
                 const page = pdfDoc.getPage(pageNum - 1);
@@ -1177,7 +1156,7 @@ class CanvasManager {
             }
 
             // Sauvegarder le PDF modifié
-            const modifiedPdfBytes = await pdfDoc.save();
+            const modifiedPdfBytes = pdfDoc.save();
             const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
             
             // Créer un lien de téléchargement
