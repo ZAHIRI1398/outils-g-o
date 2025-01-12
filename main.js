@@ -1,600 +1,1175 @@
-import { CanvasManager } from './classes/canvas_manager.js';
-
-document.addEventListener('DOMContentLoaded', () => {
-    const container = document.getElementById('container1');
-    const canvasManager = new CanvasManager(container);
-    window.canvasManager = canvasManager;
-
-    // Gestionnaire d'événements pour les outils de dessin
-    document.getElementById('btn-point')?.addEventListener('click', () => canvasManager.setCurrentTool('point'));
-    document.getElementById('btn-milieu')?.addEventListener('click', () => canvasManager.setCurrentTool('milieu'));
-    document.getElementById('btn-segment')?.addEventListener('click', () => canvasManager.setCurrentTool('segment'));
-    document.getElementById('btn-segment-known')?.addEventListener('click', () => canvasManager.setCurrentTool('segment-known'));
-    document.getElementById('btn-droite')?.addEventListener('click', () => canvasManager.setCurrentTool('droite'));
-    document.getElementById('btn-parallele')?.addEventListener('click', () => canvasManager.setCurrentTool('parallele'));
-    document.getElementById('btn-perpendiculaire')?.addEventListener('click', () => canvasManager.setCurrentTool('perpendiculaire'));
-    document.getElementById('btn-compas')?.addEventListener('click', () => canvasManager.setCurrentTool('compas'));
-    document.getElementById('btn-compas-known')?.addEventListener('click', () => canvasManager.setCurrentTool('compas-known'));
-    document.getElementById('btn-text')?.addEventListener('click', () => canvasManager.setCurrentTool('text'));
-    document.getElementById('btn-gomme')?.addEventListener('click', () => canvasManager.setCurrentTool('gomme'));
-    document.getElementById('btn-angle')?.addEventListener('click', () => canvasManager.setCurrentTool('angle'));
-    document.getElementById('btn-polygon')?.addEventListener('click', () => canvasManager.setCurrentTool('polygon'));
-
-    // Gestionnaire d'événements pour les couleurs
-    const colorPicker = document.getElementById('color-picker');
-    const fillColorPicker = document.getElementById('fill-color-picker');
-
-    if (colorPicker) {
-        colorPicker.addEventListener('input', (e) => {
-            const currentPage = canvasManager.getCurrentPage();
-            if (currentPage) {
-                currentPage.setColor(e.target.value);
-            }
-        });
-    }
-
-    if (fillColorPicker) {
-        fillColorPicker.addEventListener('input', (e) => {
-            const currentPage = canvasManager.getCurrentPage();
-            if (currentPage) {
-                currentPage.setFillColor(e.target.value);
-            }
-        });
-    }
-
-    // Gestionnaire d'événements pour l'outil de remplissage
-    document.getElementById('btn-fill')?.addEventListener('click', () => {
-        canvasManager.setCurrentTool('fill');
-    });
-
-    // Gestionnaire d'événements pour la navigation des pages
-    document.getElementById('btn-add')?.addEventListener('click', () => canvasManager.addPage());
-    document.getElementById('btn-remove')?.addEventListener('click', () => canvasManager.removePage());
-
-    // Navigation entre les pages avec les flèches du clavier
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowRight') {
-            const nextIndex = canvasManager.getCurrentPageIndex() + 1;
-            if (nextIndex < canvasManager.getPages().length) {
-                canvasManager.setCurrentPage(nextIndex);
-            }
-        } else if (e.key === 'ArrowLeft') {
-            const prevIndex = canvasManager.getCurrentPageIndex() - 1;
-            if (prevIndex >= 0) {
-                canvasManager.setCurrentPage(prevIndex);
-            }
+class CanvasManager {
+    constructor() {
+        console.log('Début de l\'initialisation de CanvasManager');
+        this.pdfDoc = null;
+        this.currentFile = null;
+        this.currentScale = 1.5;
+        this.currentTool = null;
+        this.isDrawing = false;
+        this.startPoint = null;
+        this.selectedLine = null;
+        this.selectedMidpoint = null;
+        this.polygonSides = 3;
+        this.fillColor = '#ffffff';
+        this.fillOpacity = 0.5;
+        this.currentPolygonPoints = [];
+        this.eraserRadius = 10; // Rayon de la gomme en pixels
+        this.container = document.getElementById('pdf-container');
+        this.pageInput = document.getElementById('page-input');
+        this.totalPagesSpan = document.getElementById('total-pages');
+        this.zoomLevelSpan = document.getElementById('zoom-level');
+        this.drawingLayers = new Map(); // Stocke les canvas de dessin par numéro de page
+        this.shapes = new Map(); // Stocke les formes par numéro de page
+        this.PIXELS_PER_CM = 37.8; // 96 DPI = 37.8 pixels/cm
+        
+        if (!this.container) {
+            throw new Error('Conteneur PDF non trouvé');
         }
-    });
 
-    // Gestionnaire d'événements pour le chargement de PDF
-    const pdfInput = document.getElementById('pdf-input');
-    const fileName = document.getElementById('file-name');
-    let currentPdfDocument = null;
+        // Écouter les changements de page
+        this.pageInput.addEventListener('change', () => {
+            const pageNum = parseInt(this.pageInput.value);
+            this.goToPage(pageNum);
+        });
 
-    pdfInput.addEventListener('change', async function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            fileName.textContent = file.name;
-            
-            if (file.type === 'application/pdf') {
-                try {
-                    const fileReader = new FileReader();
-                    fileReader.onload = async function() {
-                        const typedarray = new Uint8Array(this.result);
-                        
-                        // Chargement du PDF
-                        const pdf = await pdfjsLib.getDocument(typedarray).promise;
-                        currentPdfDocument = pdf;
-                        console.log('PDF chargé avec', pdf.numPages, 'pages');
+        console.log('CanvasManager initialisé avec succès');
+    }
 
-                        // Réinitialiser le conteneur
-                        const centerColumn = document.getElementById('center-column');
-                        const container = document.getElementById('container1');
-                        container.innerHTML = '';
-                        canvasManager.pages = [];
-                        canvasManager.currentPage = null;
-                        canvasManager.currentPageIndex = 0;
+    pixelsToCm(pixels) {
+        return pixels / this.PIXELS_PER_CM;
+    }
 
-                        // Créer un conteneur pour les pages PDF
-                        const pdfContainer = document.createElement('div');
-                        pdfContainer.id = 'pdf-container';
-                        container.appendChild(pdfContainer);
+    formatDistance(pixels) {
+        const cm = this.pixelsToCm(pixels);
+        return `${cm.toFixed(1)} cm`;
+    }
 
-                        // Forcer le scroll en haut
-                        centerColumn.scrollTop = 0;
-                        
-                        // Pour chaque page du PDF
-                        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                            const page = await pdf.getPage(pageNum);
-                            const viewport = page.getViewport({ scale: 1.5 });
-                            
-                            // Créer un nouveau canvas pour chaque page
-                            const canvasPage = canvasManager.addPage();
-                            if (!canvasPage) continue;
+    createDrawingLayer(pageNumber, pageContainer) {
+        console.log('Création du layer de dessin pour la page', pageNumber);
+        // Créer un nouveau canvas de dessin pour la page
+        const drawingCanvas = document.createElement('canvas');
+        const pageRect = pageContainer.getBoundingClientRect();
+        
+        drawingCanvas.width = pageRect.width;
+        drawingCanvas.height = pageRect.height;
+        drawingCanvas.style.position = 'absolute';
+        drawingCanvas.style.top = '0';
+        drawingCanvas.style.left = '0';
+        drawingCanvas.style.pointerEvents = 'none';
+        
+        // Ajouter le canvas à la page
+        pageContainer.style.position = 'relative';
+        pageContainer.appendChild(drawingCanvas);
+        
+        // Stocker le canvas et son contexte
+        this.drawingLayers.set(pageNumber, {
+            canvas: drawingCanvas,
+            context: drawingCanvas.getContext('2d')
+        });
 
-                            // Déplacer le canvas dans le conteneur PDF
-                            pdfContainer.appendChild(canvasPage.canvas);
-                            
-                            // Ajuster la taille du canvas
-                            canvasPage.canvas.width = viewport.width;
-                            canvasPage.canvas.height = viewport.height;
-                            canvasPage.pdfCanvas.width = viewport.width;
-                            canvasPage.pdfCanvas.height = viewport.height;
-                            
-                            try {
-                                // Dessiner la page du PDF
-                                await page.render({
-                                    canvasContext: canvasPage.pdfContext,
-                                    viewport: viewport
-                                }).promise;
-                                
-                                // Redessiner tout
-                                canvasPage.redraw();
-                                console.log(`Page ${pageNum} rendue avec succès`);
-                            } catch (renderError) {
-                                console.error(`Erreur lors du rendu de la page ${pageNum}:`, renderError);
-                            }
-                        }
+        // Ajouter les gestionnaires d'événements à la page
+        pageContainer.addEventListener('mousedown', (e) => this.handleMouseDown(e, pageNumber));
+        pageContainer.addEventListener('mousemove', (e) => this.handleMouseMove(e, pageNumber));
+        pageContainer.addEventListener('mouseup', (e) => this.handleMouseUp(e, pageNumber));
+    }
 
-                        // S'assurer que le conteneur est au début
-                        centerColumn.scrollTop = 0;
-                        window.scrollTo(0, 0);
-                    };
-                    fileReader.readAsArrayBuffer(file);
-                } catch (error) {
-                    console.error('Erreur lors du chargement du PDF:', error);
+    setTool(tool) {
+        console.log('Outil sélectionné:', tool);
+        this.currentTool = tool;
+        this.selectedLine = null; // Réinitialiser la ligne sélectionnée
+        this.container.style.cursor = 'crosshair';
+        document.querySelectorAll('.submenu').forEach(menu => {
+            menu.style.display = 'none';
+        });
+        
+        // Afficher/masquer les options appropriées
+        const polygonSidesDiv = document.getElementById('polygon-sides');
+        if (polygonSidesDiv) {
+            polygonSidesDiv.style.display = tool === 'polygon' ? 'block' : 'none';
+        }
+    }
+
+    setPolygonSides(sides) {
+        this.polygonSides = Math.max(3, parseInt(sides));
+    }
+
+    setFillColor(color) {
+        console.log('Nouvelle couleur:', color);
+        this.fillColor = color;
+        this.redrawShapes(this.currentPage);
+    }
+
+    setFillOpacity(opacity) {
+        console.log('Nouvelle opacité:', opacity);
+        this.fillOpacity = opacity / 100;
+        this.redrawShapes(this.currentPage);
+    }
+
+    getFillStyle(color, opacity) {
+        // Convertir la couleur hex en RGB
+        const r = parseInt(color.substr(1,2), 16);
+        const g = parseInt(color.substr(3,2), 16);
+        const b = parseInt(color.substr(5,2), 16);
+        return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    async handleMouseDown(event, pageNumber) {
+        if (!this.currentTool) return;
+
+        const drawingLayer = this.drawingLayers.get(pageNumber);
+        if (!drawingLayer) return;
+
+        const canvas = drawingLayer.canvas;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const point = { x, y };
+
+        if (this.currentTool === 'midpoint') {
+            // Pour l'outil milieu, on cherche la ligne la plus proche
+            const nearestLine = this.findNearestLine(point, pageNumber);
+            if (nearestLine && this.getDistance(point, nearestLine) < 10) {
+                const midpoint = this.getMidpoint(nearestLine.start, nearestLine.end);
+                const shapes = this.shapes.get(pageNumber) || [];
+                shapes.push({
+                    type: 'point',
+                    start: midpoint,
+                    end: midpoint,
+                    isMidpoint: true,
+                    parentLine: nearestLine
+                });
+                this.shapes.set(pageNumber, shapes);
+                this.redrawShapes(pageNumber);
+            }
+            return;
+        }
+
+        if (this.currentTool === 'parallel' || this.currentTool === 'perpendicular') {
+            if (!this.selectedLine) {
+                // Première étape : sélectionner une ligne de référence
+                const nearestLine = this.findNearestLine(point, pageNumber);
+                if (nearestLine && this.getDistance(point, nearestLine) < 10) {
+                    this.selectedLine = nearestLine;
+                    this.redrawShapes(pageNumber); // Pour mettre en évidence la ligne sélectionnée
                 }
-            } else if (file.type.startsWith('image/')) {
-                const img = new Image();
-                img.onload = function() {
-                    const canvasPage = canvasManager.getCurrentPage();
-                    if (!canvasPage) return;
+            } else {
+                // Deuxième étape : placer la nouvelle ligne
+                this.isDrawing = true;
+                this.startPoint = point;
+            }
+        } else if (this.currentTool === 'freepolygon') {
+            if (!this.currentPolygonPoints.length) {
+                // Premier point du polygone
+                this.currentPolygonPoints.push(point);
+                this.isDrawing = true;
+            } else {
+                // Vérifier si on ferme le polygone
+                const firstPoint = this.currentPolygonPoints[0];
+                const distance = Math.sqrt(
+                    Math.pow(point.x - firstPoint.x, 2) +
+                    Math.pow(point.y - firstPoint.y, 2)
+                );
+                
+                if (distance < 10 && this.currentPolygonPoints.length >= 3) {
+                    // Fermer le polygone
+                    const shapes = this.shapes.get(pageNumber) || [];
+                    shapes.push({
+                        type: 'freepolygon',
+                        points: [...this.currentPolygonPoints],
+                        fillColor: this.fillColor,
+                        fillOpacity: this.fillOpacity
+                    });
+                    this.shapes.set(pageNumber, shapes);
+                    this.currentPolygonPoints = [];
+                    this.isDrawing = false;
+                } else {
+                    // Ajouter un nouveau point
+                    this.currentPolygonPoints.push(point);
+                }
+            }
+            this.redrawShapes(pageNumber);
+            return;
+        } else if (this.currentTool === 'eraser') {
+            const shapeIndex = this.findShapeAtPoint(point, pageNumber);
+            if (shapeIndex !== -1) {
+                const shapes = this.shapes.get(pageNumber);
+                shapes.splice(shapeIndex, 1);
+                this.shapes.set(pageNumber, shapes);
+                this.redrawShapes(pageNumber);
+            }
+            return;
+        } else if (this.currentTool === 'writeText') {
+            const text = prompt("Entrez votre texte :");
+            if (text) {
+                const shapes = this.shapes.get(pageNumber) || [];
+                shapes.push({
+                    type: 'text',
+                    text: text,
+                    x: x,
+                    y: y,
+                    fontSize: 16,
+                    color: '#000000'
+                });
+                this.shapes.set(pageNumber, shapes);
+                this.redrawShapes(pageNumber);
+            }
+            return;
+        } else if (this.currentTool === 'readText') {
+            try {
+                console.log('Tentative de lecture du texte à la position:', x, y);
+                const page = await this.pdfDoc.getPage(pageNumber);
+                const viewport = page.getViewport({ scale: this.currentScale });
+                
+                // Extraire le texte de la page
+                const textContent = await page.getTextContent();
+                console.log('Contenu texte trouvé:', textContent.items.length, 'éléments');
+                
+                // Trouver le texte le plus proche du clic
+                let closestText = [];
+                const DETECTION_RADIUS = 150; // pixels
+                
+                // Convertir les coordonnées du clic en coordonnées PDF
+                const clickY = viewport.height - y;
+                
+                for (const item of textContent.items) {
+                    // Convertir les coordonnées du texte
+                    const itemX = item.transform[4] * viewport.scale;
+                    const itemY = viewport.height - (item.transform[5] * viewport.scale);
                     
-                    // Ajuster la taille du canvas
-                    canvasPage.canvas.width = img.width;
-                    canvasPage.canvas.height = img.height;
-                    canvasPage.pdfCanvas.width = img.width;
-                    canvasPage.pdfCanvas.height = img.height;
+                    const distance = Math.sqrt(
+                        Math.pow(x - itemX, 2) + 
+                        Math.pow(clickY - itemY, 2)
+                    );
                     
-                    // Dessiner l'image
-                    canvasPage.pdfContext.drawImage(img, 0, 0);
-                    canvasPage.redraw();
+                    console.log('Texte trouvé:', item.str, 'à', itemX, itemY, 'distance:', distance);
+                    
+                    if (distance < DETECTION_RADIUS) {
+                        closestText.push({
+                            text: item.str,
+                            distance: distance,
+                            y: itemY // Pour trier par position verticale
+                        });
+                    }
+                }
+                
+                if (closestText.length > 0) {
+                    // Trier d'abord par position verticale pour garder l'ordre de lecture
+                    closestText.sort((a, b) => b.y - a.y);
+                    
+                    // Prendre tous les textes trouvés dans le rayon
+                    const text = closestText.map(item => item.text).join(' ');
+                    console.log('Textes trouvés:', text);
+                    alert(text);
+                } else {
+                    alert('Aucun texte trouvé à cet endroit. Essayez de cliquer plus près du texte.');
+                    console.log('Aucun texte trouvé aux coordonnées:', x, y);
+                }
+            } catch (error) {
+                console.error('Erreur lors de la lecture du texte:', error);
+                alert('Erreur lors de la lecture du texte. Veuillez réessayer.');
+            }
+            return;
+        } else {
+            this.isDrawing = true;
+            this.startPoint = point;
+        }
+    }
+
+    handleMouseMove(event, pageNumber) {
+        const drawingLayer = this.drawingLayers.get(pageNumber);
+        if (!drawingLayer) return;
+
+        const canvas = drawingLayer.canvas;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const currentPoint = { x, y };
+
+        const context = drawingLayer.context;
+
+        // Si on a une ligne sélectionnée pour parallèle/perpendiculaire, montrer l'aperçu
+        if ((this.currentTool === 'parallel' || this.currentTool === 'perpendicular') && this.selectedLine) {
+            // Redessiner pour effacer l'ancien aperçu
+            this.redrawShapes(pageNumber);
+            
+            // Dessiner la ligne sélectionnée en surbrillance
+            context.beginPath();
+            context.strokeStyle = 'blue';
+            context.lineWidth = 2;
+            context.moveTo(this.selectedLine.start.x, this.selectedLine.start.y);
+            context.lineTo(this.selectedLine.end.x, this.selectedLine.end.y);
+            context.stroke();
+
+            // Dessiner l'aperçu de la nouvelle ligne
+            context.beginPath();
+            context.strokeStyle = 'rgba(0, 0, 255, 0.5)';
+            context.lineWidth = 2;
+            if (this.currentTool === 'parallel') {
+                this.drawParallelLineFromReference(this.selectedLine, currentPoint, context);
+            } else {
+                this.drawPerpendicularLineFromReference(this.selectedLine, currentPoint, context);
+            }
+            context.stroke();
+            return;
+        }
+
+        if (this.currentTool === 'freepolygon' && this.currentPolygonPoints.length > 0) {
+            this.redrawShapes(pageNumber);
+            context.strokeStyle = 'blue';
+            context.lineWidth = 2;
+            this.drawFreePolygon(context, [...this.currentPolygonPoints, currentPoint]);
+            return;
+        }
+
+        // Pour les autres outils, continuer comme avant
+        if (!this.isDrawing || !this.currentTool) return;
+        
+        // Effacer le canvas et redessiner toutes les formes
+        this.redrawShapes(pageNumber);
+        
+        // Dessiner la forme en cours
+        context.beginPath();
+        context.strokeStyle = 'blue';
+        context.lineWidth = 2;
+
+        let radius;
+        switch (this.currentTool) {
+            case 'polygon':
+                this.drawPolygon(context, this.startPoint, currentPoint);
+                break;
+            case 'circle':
+                radius = Math.sqrt(
+                    Math.pow(currentPoint.x - this.startPoint.x, 2) +
+                    Math.pow(currentPoint.y - this.startPoint.y, 2)
+                );
+                context.arc(this.startPoint.x, this.startPoint.y, radius, 0, 2 * Math.PI);
+                break;
+            case 'line':
+                context.moveTo(this.startPoint.x, this.startPoint.y);
+                context.lineTo(currentPoint.x, currentPoint.y);
+                break;
+            case 'measure':
+                context.moveTo(this.startPoint.x, this.startPoint.y);
+                context.lineTo(currentPoint.x, currentPoint.y);
+                const distance = Math.sqrt(
+                    Math.pow(currentPoint.x - this.startPoint.x, 2) +
+                    Math.pow(currentPoint.y - this.startPoint.y, 2)
+                );
+                const midX = (this.startPoint.x + currentPoint.x) / 2;
+                const midY = (this.startPoint.y + currentPoint.y) / 2;
+                context.font = '12px Arial';
+                context.fillStyle = 'blue';
+                context.fillText(this.formatDistance(distance), midX + 5, midY - 5);
+                break;
+        }
+        context.stroke();
+    }
+
+    handleMouseUp(event, pageNumber) {
+        if (!this.isDrawing || !this.currentTool) return;
+
+        const drawingLayer = this.drawingLayers.get(pageNumber);
+        if (!drawingLayer) return;
+
+        const canvas = drawingLayer.canvas;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const endPoint = { x, y };
+
+        // Créer et stocker la nouvelle forme
+        if (this.currentTool === 'parallel' || this.currentTool === 'perpendicular') {
+            if (this.selectedLine) {
+                const newLine = {
+                    type: 'line',
+                    start: this.startPoint,
+                    end: endPoint,
+                    referenceLine: this.selectedLine,
+                    lineType: this.currentTool
                 };
-                img.src = URL.createObjectURL(file);
+                const shapes = this.shapes.get(pageNumber) || [];
+                shapes.push(newLine);
+                this.shapes.set(pageNumber, shapes);
+                this.selectedLine = null; // Réinitialiser la ligne sélectionnée
             }
-        }
-    });
-
-    // Gestionnaire d'événements pour les popups
-    const numberPopup = document.getElementById('glisser-nombre-popup');
-    const measurePopup = document.getElementById('glisser-mesure-popup');
-
-    // Ouvrir le popup Glisser Nombre
-    document.getElementById('btn-glisser-nombre')?.addEventListener('click', () => {
-        numberPopup.style.display = 'block';
-    });
-
-    // Ouvrir le popup Glisser Mesure
-    document.getElementById('btn-glisser-mesure')?.addEventListener('click', () => {
-        measurePopup.style.display = 'block';
-    });
-
-    // Fermer les popups
-    document.querySelectorAll('.close').forEach(closeBtn => {
-        closeBtn.addEventListener('click', () => {
-            numberPopup.style.display = 'none';
-            measurePopup.style.display = 'none';
-        });
-    });
-
-    // Gestion des boutons + et - pour le nombre
-    document.getElementById('increase-number')?.addEventListener('click', () => {
-        const numberValue = document.getElementById('number-value');
-        numberValue.value = parseInt(numberValue.value) + 1;
-    });
-
-    document.getElementById('decrease-number')?.addEventListener('click', () => {
-        const numberValue = document.getElementById('number-value');
-        numberValue.value = parseInt(numberValue.value) - 1;
-    });
-
-    // Gestion des boutons + et - pour la mesure
-    document.getElementById('increase-measure')?.addEventListener('click', () => {
-        const measureValue = document.getElementById('measure-value');
-        measureValue.value = (parseFloat(measureValue.value) + 0.1).toFixed(1);
-    });
-
-    document.getElementById('decrease-measure')?.addEventListener('click', () => {
-        const measureValue = document.getElementById('measure-value');
-        measureValue.value = (parseFloat(measureValue.value) - 0.1).toFixed(1);
-    });
-
-    // Appliquer le nombre
-    document.getElementById('apply-number')?.addEventListener('click', () => {
-        const value = parseInt(document.getElementById('number-value').value);
-        const currentPage = canvasManager.getCurrentPage();
-        if (currentPage) {
-            // Créer un élément de texte avec le nombre
-            const text = value.toString();
-            const fontSize = 20;
-            currentPage.context.font = `${fontSize}px Arial`;
-            
-            // Position initiale au centre
-            const x = currentPage.canvas.width / 2;
-            const y = currentPage.canvas.height / 2;
-            
-            // Ajouter le nombre comme texte draggable
-            currentPage.addDraggableText(text, x, y, fontSize);
-            currentPage.redraw();
-        }
-        numberPopup.style.display = 'none';
-    });
-
-    // Appliquer la mesure
-    document.getElementById('apply-measure')?.addEventListener('click', () => {
-        const value = parseFloat(document.getElementById('measure-value').value);
-        const currentPage = canvasManager.getCurrentPage();
-        if (currentPage) {
-            // Créer un élément de texte avec la mesure
-            const text = value.toFixed(1) + ' cm';
-            const fontSize = 16;
-            currentPage.context.font = `${fontSize}px Arial`;
-            
-            // Position initiale au centre
-            const x = currentPage.canvas.width / 2;
-            const y = currentPage.canvas.height / 2;
-            
-            // Ajouter la mesure comme texte draggable
-            currentPage.addDraggableText(text, x, y, fontSize);
-            currentPage.redraw();
-        }
-        measurePopup.style.display = 'none';
-    });
-
-    // Fermer les popups en cliquant en dehors
-    window.addEventListener('click', (e) => {
-        if (e.target === numberPopup) {
-            numberPopup.style.display = 'none';
-        }
-        if (e.target === measurePopup) {
-            measurePopup.style.display = 'none';
-        }
-    });
-
-    // Fonction pour sauvegarder le PDF avec les annotations
-    async function savePDFWithAnnotations() {
-        try {
-            const pages = canvasManager.pages;
-            if (!pages || pages.length === 0) {
-                throw new Error('Aucune page à sauvegarder');
-            }
-
-            // Définir les marges supplémentaires (en points)
-            const extraMargin = 144; // 2 pouces de chaque côté (72 points * 2)
-
-            // Créer un nouveau document PDF avec les dimensions augmentées
-            const firstPage = pages[0];
-            const pdfDimensions = {
-                width: (firstPage.canvas.width / 96 * 72) + (extraMargin * 2), // Ajouter les marges
-                height: firstPage.canvas.height / 96 * 72
+        } else {
+            const shape = {
+                type: this.currentTool,
+                start: this.startPoint,
+                end: endPoint
             };
+            const shapes = this.shapes.get(pageNumber) || [];
+            shapes.push(shape);
+            this.shapes.set(pageNumber, shapes);
+        }
 
-            const pdf = new jsPDF({
-                orientation: pdfDimensions.width > pdfDimensions.height ? 'landscape' : 'portrait',
-                unit: 'pt',
-                format: [pdfDimensions.width, pdfDimensions.height]
+        if (this.currentTool === 'polygon') {
+            const shapes = this.shapes.get(pageNumber) || [];
+            shapes.push({
+                type: 'polygon',
+                start: this.startPoint,
+                end: endPoint,
+                sides: this.polygonSides
+            });
+            this.shapes.set(pageNumber, shapes);
+        }
+
+        this.isDrawing = false;
+        this.startPoint = null;
+        this.redrawShapes(pageNumber);
+    }
+
+    getMidpoint(start, end) {
+        return {
+            x: (start.x + end.x) / 2,
+            y: (start.y + end.y) / 2
+        };
+    }
+
+    findNearestMidpoint(point, pageNumber) {
+        const shapes = this.shapes.get(pageNumber) || [];
+        let nearestMidpoint = null;
+        let minDistance = 10; // Distance maximale de sélection en pixels
+
+        shapes.forEach(shape => {
+            if (shape.type === 'line' || shape.type === 'measure') {
+                const midpoint = this.getMidpoint(shape.start, shape.end);
+                const distance = Math.sqrt(
+                    Math.pow(point.x - midpoint.x, 2) +
+                    Math.pow(point.y - midpoint.y, 2)
+                );
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestMidpoint = {
+                        point: midpoint,
+                        parentShape: shape
+                    };
+                }
+            }
+        });
+
+        return nearestMidpoint;
+    }
+
+    redrawShapes(pageNumber) {
+        const drawingLayer = this.drawingLayers.get(pageNumber);
+        if (!drawingLayer) return;
+
+        const context = drawingLayer.context;
+        const canvas = drawingLayer.canvas;
+        
+        // Effacer le canvas
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Redessiner toutes les formes
+        const shapes = this.shapes.get(pageNumber) || [];
+        shapes.forEach(shape => {
+            context.beginPath();
+            context.strokeStyle = shape === this.selectedLine ? 'blue' : 'black';
+            context.lineWidth = 2;
+
+            switch (shape.type) {
+                case 'point':
+                    if (shape.isMidpoint) {
+                        // Point milieu en rouge avec un cercle plus grand
+                        context.fillStyle = 'red';
+                        context.arc(shape.start.x, shape.start.y, 4, 0, 2 * Math.PI);
+                        context.fill();
+                        // Ajouter un petit label "M"
+                        context.fillStyle = 'blue';
+                        context.font = '12px Arial';
+                        context.fillText('M', shape.start.x + 8, shape.start.y - 8);
+                    } else {
+                        context.fillStyle = 'black';
+                        context.arc(shape.start.x, shape.start.y, 3, 0, 2 * Math.PI);
+                        context.fill();
+                    }
+                    break;
+                case 'line':
+                    if (shape.lineType === 'parallel') {
+                        this.drawParallelLineFromReference(shape.referenceLine, shape.end, context);
+                    } else if (shape.lineType === 'perpendicular') {
+                        this.drawPerpendicularLineFromReference(shape.referenceLine, shape.end, context);
+                    } else {
+                        context.moveTo(shape.start.x, shape.start.y);
+                        context.lineTo(shape.end.x, shape.end.y);
+                    }
+                    break;
+                case 'circle':
+                    const radius = Math.sqrt(
+                        Math.pow(shape.end.x - shape.start.x, 2) +
+                        Math.pow(shape.end.y - shape.start.y, 2)
+                    );
+                    // Dessiner le cercle
+                    context.arc(shape.start.x, shape.start.y, radius, 0, 2 * Math.PI);
+                    context.stroke();
+                    
+                    // Marquer le centre
+                    context.beginPath();
+                    context.fillStyle = 'red';
+                    context.arc(shape.start.x, shape.start.y, 3, 0, 2 * Math.PI);
+                    context.fill();
+                    
+                    // Ajouter le label "C" pour le centre
+                    context.fillStyle = 'blue';
+                    context.font = '12px Arial';
+                    context.fillText('C', shape.start.x + 8, shape.start.y - 8);
+                    
+                    // Afficher le rayon en cm
+                    const radiusCm = this.formatDistance(radius);
+                    context.fillText(`r = ${radiusCm}`, 
+                        (shape.start.x + shape.end.x) / 2 + 10, 
+                        (shape.start.y + shape.end.y) / 2 + 10
+                    );
+                    break;
+                case 'measure':
+                    context.moveTo(shape.start.x, shape.start.y);
+                    context.lineTo(shape.end.x, shape.end.y);
+                    const distance = Math.sqrt(
+                        Math.pow(shape.end.x - shape.start.x, 2) +
+                        Math.pow(shape.end.y - shape.start.y, 2)
+                    );
+                    const midpoint = this.getMidpoint(shape.start, shape.end);
+                    context.font = '12px Arial';
+                    context.fillStyle = 'blue';
+                    context.fillText(this.formatDistance(distance), midpoint.x + 5, midpoint.y - 5);
+                    context.strokeStyle = 'blue';
+                    break;
+                case 'polygon':
+                    this.drawPolygon(context, shape.start, shape.end);
+                    break;
+                case 'freepolygon':
+                    this.drawFreePolygon(context, shape.points, shape.fillColor, shape.fillOpacity);
+                    break;
+                case 'text':
+                    context.font = `${shape.fontSize}px Arial`;
+                    context.fillStyle = shape.color;
+                    context.fillText(shape.text, shape.x, shape.y);
+                    break;
+            }
+            context.stroke();
+        });
+    }
+
+    findNearestLine(point, pageNumber) {
+        const shapes = this.shapes.get(pageNumber) || [];
+        let nearestLine = null;
+        let minDistance = Infinity;
+
+        shapes.forEach(shape => {
+            if (shape.type === 'line') {
+                const distance = this.getDistance(point, shape);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestLine = shape;
+                }
+            }
+        });
+
+        return nearestLine;
+    }
+
+    getDistance(point, line) {
+        const A = line.start;
+        const B = line.end;
+        const P = point;
+
+        const AB = { x: B.x - A.x, y: B.y - A.y };
+        const AP = { x: P.x - A.x, y: P.y - A.y };
+        const AB_squared = AB.x * AB.x + AB.y * AB.y;
+        
+        if (AB_squared === 0) {
+            return Math.sqrt(AP.x * AP.x + AP.y * AP.y);
+        }
+
+        const t = Math.max(0, Math.min(1, (AP.x * AB.x + AP.y * AB.y) / AB_squared));
+        const projection = {
+            x: A.x + t * AB.x,
+            y: A.y + t * AB.y
+        };
+
+        return Math.sqrt(
+            Math.pow(P.x - projection.x, 2) +
+            Math.pow(P.y - projection.y, 2)
+        );
+    }
+
+    drawParallelLineFromReference(referenceLine, point, context) {
+        const dx = referenceLine.end.x - referenceLine.start.x;
+        const dy = referenceLine.end.y - referenceLine.start.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        
+        context.moveTo(point.x, point.y);
+        context.lineTo(point.x + dx, point.y + dy);
+        
+        // Ajouter des marques de parallélisme
+        this.drawParallelMarks(context, point, dx, dy);
+        this.drawParallelMarks(context, { x: point.x + dx, y: point.y + dy }, -dx, -dy);
+    }
+
+    drawParallelMarks(context, point, dx, dy) {
+        const markLength = 10;
+        const angle = Math.atan2(dy, dx);
+        const perpAngle = angle + Math.PI / 2;
+        
+        for (let i = -1; i <= 1; i++) {
+            const x = point.x + i * 5;
+            const y = point.y + i * 5 * dy/dx;
+            context.moveTo(x, y);
+            context.lineTo(
+                x + markLength * Math.cos(perpAngle),
+                y + markLength * Math.sin(perpAngle)
+            );
+        }
+    }
+
+    drawPerpendicularLineFromReference(referenceLine, point, context) {
+        const dx = referenceLine.end.x - referenceLine.start.x;
+        const dy = referenceLine.end.y - referenceLine.start.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        
+        // Calculer le vecteur perpendiculaire
+        const perpDx = -dy;
+        const perpDy = dx;
+        
+        // Normaliser le vecteur perpendiculaire à la même longueur que la ligne de référence
+        const scale = length / Math.sqrt(perpDx * perpDx + perpDy * perpDy);
+        
+        context.moveTo(point.x, point.y);
+        context.lineTo(point.x + perpDx * scale, point.y + perpDy * scale);
+        
+        // Ajouter le symbole d'angle droit
+        this.drawRightAngleSymbol(context, point, dx, dy);
+    }
+
+    drawRightAngleSymbol(context, point, dx, dy) {
+        const size = 15;
+        const angle = Math.atan2(dy, dx);
+        
+        // Dessiner un petit carré pour indiquer l'angle droit
+        context.moveTo(point.x, point.y);
+        context.lineTo(
+            point.x + size * Math.cos(angle),
+            point.y + size * Math.sin(angle)
+        );
+        context.lineTo(
+            point.x + size * (Math.cos(angle) - Math.sin(angle)),
+            point.y + size * (Math.sin(angle) + Math.cos(angle))
+        );
+        context.lineTo(
+            point.x - size * Math.sin(angle),
+            point.y + size * Math.cos(angle)
+        );
+        context.lineTo(point.x, point.y);
+    }
+
+    drawPolygon(context, start, end) {
+        const sideLength = Math.sqrt(
+            Math.pow(end.x - start.x, 2) +
+            Math.pow(end.y - start.y, 2)
+        );
+        
+        // Calculer l'angle du premier côté par rapport à l'horizontale
+        const baseAngle = Math.atan2(end.y - start.y, end.x - start.x);
+        
+        // Calculer les points du polygone
+        const points = [start];
+        const angleStep = (2 * Math.PI) / this.polygonSides;
+        
+        for (let i = 1; i < this.polygonSides; i++) {
+            const angle = baseAngle + i * angleStep;
+            const x = points[i-1].x + sideLength * Math.cos(angle);
+            const y = points[i-1].y + sideLength * Math.sin(angle);
+            points.push({ x, y });
+        }
+
+        // Dessiner le polygone
+        context.beginPath();
+        context.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            context.lineTo(points[i].x, points[i].y);
+        }
+        context.closePath();
+        
+        // Remplir le polygone
+        if (this.fillColor && this.fillOpacity > 0) {
+            context.fillStyle = this.getFillStyle(this.fillColor, this.fillOpacity);
+            context.fill();
+        }
+        context.stroke();
+
+        // Afficher la mesure sur chaque côté
+        for (let i = 0; i < points.length; i++) {
+            const nextIndex = (i + 1) % points.length;
+            const midX = (points[i].x + points[nextIndex].x) / 2;
+            const midY = (points[i].y + points[nextIndex].y) / 2;
+            
+            context.font = '12px Arial';
+            context.fillStyle = 'blue';
+            context.fillText(this.formatDistance(sideLength), midX + 5, midY - 5);
+        }
+
+        return points;
+    }
+
+    drawFreePolygon(context, points, fillColor, fillOpacity) {
+        if (!points || points.length < 2) return;
+
+        context.beginPath();
+        context.moveTo(points[0].x, points[0].y);
+        
+        for (let i = 1; i < points.length; i++) {
+            if (points[i] && points[i].x !== undefined && points[i].y !== undefined) {
+                context.lineTo(points[i].x, points[i].y);
+            }
+        }
+
+        if (points.length >= 3) {
+            context.closePath();
+            
+            // Remplir le polygone
+            if (fillColor && fillOpacity > 0) {
+                context.fillStyle = this.getFillStyle(fillColor, fillOpacity);
+                context.fill();
+            }
+        }
+        
+        context.stroke();
+
+        // Afficher les mesures des côtés
+        for (let i = 0; i < points.length; i++) {
+            const nextIndex = (i + 1) % points.length;
+            if (i === points.length - 1 && !this.isDrawing) continue;
+            
+            if (!points[i] || !points[nextIndex]) continue;
+            
+            const sideLength = Math.sqrt(
+                Math.pow(points[nextIndex].x - points[i].x, 2) +
+                Math.pow(points[nextIndex].y - points[i].y, 2)
+            );
+            
+            const midX = (points[i].x + points[nextIndex].x) / 2;
+            const midY = (points[i].y + points[nextIndex].y) / 2;
+            
+            context.font = '12px Arial';
+            context.fillStyle = 'blue';
+            context.fillText(this.formatDistance(sideLength), midX + 5, midY - 5);
+        }
+    }
+
+    findShapeAtPoint(point, pageNumber) {
+        const shapes = this.shapes.get(pageNumber) || [];
+        for (let i = shapes.length - 1; i >= 0; i--) {
+            const shape = shapes[i];
+            if (this.isPointInShape(point, shape)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    findTextAtPoint(point, pageNumber) {
+        const shapes = this.shapes.get(pageNumber) || [];
+        for (const shape of shapes) {
+            if (shape.type === 'text') {
+                const context = this.drawingLayers.get(pageNumber).context;
+                context.font = `${shape.fontSize}px Arial`;
+                const metrics = context.measureText(shape.text);
+                const height = shape.fontSize; // Approximation de la hauteur
+                
+                // Vérifier si le point est dans le rectangle du texte
+                if (point.x >= shape.x && 
+                    point.x <= shape.x + metrics.width &&
+                    point.y >= shape.y - height &&
+                    point.y <= shape.y) {
+                    return shape;
+                }
+            }
+        }
+        return null;
+    }
+
+    isPointInShape(point, shape) {
+        switch (shape.type) {
+            case 'point':
+                const distance = Math.sqrt(
+                    Math.pow(point.x - shape.start.x, 2) +
+                    Math.pow(point.y - shape.start.y, 2)
+                );
+                return distance <= this.eraserRadius;
+            
+            case 'line':
+                return this.isPointNearLine(point, shape.start, shape.end);
+            
+            case 'circle':
+                // Calculer la distance entre le point et le centre du cercle
+                const center = shape.start;
+                const radius = Math.sqrt(
+                    Math.pow(shape.end.x - shape.start.x, 2) +
+                    Math.pow(shape.end.y - shape.start.y, 2)
+                );
+                const distanceToCenter = Math.sqrt(
+                    Math.pow(point.x - center.x, 2) +
+                    Math.pow(point.y - center.y, 2)
+                );
+                return Math.abs(distanceToCenter - radius) <= this.eraserRadius;
+            
+            case 'text':
+                // Obtenir le contexte pour mesurer le texte
+                const context = this.drawingLayers.get(1).context; // On utilise le premier contexte disponible
+                context.font = `${shape.fontSize}px Arial`;
+                const metrics = context.measureText(shape.text);
+                const textWidth = metrics.width;
+                const textHeight = shape.fontSize;
+
+                // Vérifier si le point est près du texte
+                const textDistance = Math.min(
+                    // Distance au rectangle du texte
+                    Math.abs(point.x - shape.x),
+                    Math.abs(point.x - (shape.x + textWidth)),
+                    Math.abs(point.y - shape.y),
+                    Math.abs(point.y - (shape.y - textHeight))
+                );
+                return textDistance <= this.eraserRadius;
+            
+            case 'polygon':
+            case 'freepolygon':
+                const points = shape.type === 'polygon' ? 
+                    this.calculatePolygonPoints(shape) : 
+                    shape.points;
+                return this.isPointInPolygon(point, points);
+            
+            default:
+                return false;
+        }
+    }
+
+    calculatePolygonPoints(shape) {
+        const sideLength = Math.sqrt(
+            Math.pow(shape.end.x - shape.start.x, 2) +
+            Math.pow(shape.end.y - shape.start.y, 2)
+        );
+        
+        const baseAngle = Math.atan2(shape.end.y - shape.start.y, shape.end.x - shape.start.x);
+        const points = [shape.start];
+        const angleStep = (2 * Math.PI) / shape.sides;
+        
+        for (let i = 1; i < shape.sides; i++) {
+            const angle = baseAngle + i * angleStep;
+            const x = points[i-1].x + sideLength * Math.cos(angle);
+            const y = points[i-1].y + sideLength * Math.sin(angle);
+            points.push({ x, y });
+        }
+        
+        return points;
+    }
+
+    isPointNearLine(point, start, end) {
+        const A = point.x - start.x;
+        const B = point.y - start.y;
+        const C = end.x - start.x;
+        const D = end.y - start.y;
+        
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = -1;
+        
+        if (lenSq !== 0) {
+            param = dot / lenSq;
+        }
+        
+        let xx, yy;
+        
+        if (param < 0) {
+            xx = start.x;
+            yy = start.y;
+        } else if (param > 1) {
+            xx = end.x;
+            yy = end.y;
+        } else {
+            xx = start.x + param * C;
+            yy = start.y + param * D;
+        }
+        
+        const dx = point.x - xx;
+        const dy = point.y - yy;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        return distance <= this.eraserRadius;
+    }
+
+    isPointInPolygon(point, points) {
+        // D'abord vérifier si le point est près d'un des segments
+        for (let i = 0; i < points.length; i++) {
+            const start = points[i];
+            const end = points[(i + 1) % points.length];
+            if (this.isPointNearLine(point, start, end)) {
+                return true;
+            }
+        }
+
+        // Ensuite vérifier si le point est à l'intérieur du polygone
+        let inside = false;
+        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+            const xi = points[i].x, yi = points[i].y;
+            const xj = points[j].x, yj = points[j].y;
+            
+            const intersect = ((yi > point.y) !== (yj > point.y))
+                && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        
+        return inside;
+    }
+
+    async loadPDF(file) {
+        try {
+            console.log('Début du chargement du PDF:', file.name);
+            this.currentFile = file;
+            
+            const arrayBuffer = await file.arrayBuffer();
+            console.log('Fichier converti en ArrayBuffer');
+            
+            this.pdfDoc = await pdfjsLib.getDocument(arrayBuffer).promise;
+            console.log('PDF chargé avec', this.pdfDoc.numPages, 'pages');
+            
+            this.totalPagesSpan.textContent = this.pdfDoc.numPages;
+            
+            this.container.innerHTML = '';
+            this.drawingLayers.clear();
+            this.shapes.clear();
+            
+            for (let pageNum = 1; pageNum <= this.pdfDoc.numPages; pageNum++) {
+                await this.renderPage(pageNum);
+            }
+            console.log('Toutes les pages ont été rendues');
+        } catch (error) {
+            console.error('Erreur lors du chargement du PDF:', error);
+            throw error;
+        }
+    }
+
+    async renderPage(pageNumber) {
+        try {
+            console.log('Début du rendu de la page', pageNumber);
+            
+            if (!this.pdfDoc) {
+                throw new Error('Aucun document PDF chargé');
+            }
+            
+            if (pageNumber < 1 || pageNumber > this.pdfDoc.numPages) {
+                throw new Error('Numéro de page invalide');
+            }
+
+            const page = await this.pdfDoc.getPage(pageNumber);
+            
+            // Créer un conteneur pour la page
+            const pageContainer = document.createElement('div');
+            pageContainer.className = 'pdf-page';
+            pageContainer.id = `page-${pageNumber}`;
+            pageContainer.style.marginBottom = '20px';
+            
+            // Créer un canvas pour la page
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            
+            // Calculer les dimensions
+            const viewport = page.getViewport({ scale: this.currentScale });
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            
+            // Ajouter le canvas au conteneur de page
+            pageContainer.appendChild(canvas);
+            this.container.appendChild(pageContainer);
+            
+            // Dessiner la page
+            await page.render({
+                canvasContext: context,
+                viewport: viewport
+            }).promise;
+
+            // Créer le layer de dessin pour cette page
+            this.createDrawingLayer(pageNumber, pageContainer);
+            
+            console.log('Page', pageNumber, 'rendue avec succès');
+        } catch (error) {
+            console.error('Erreur lors du rendu de la page:', error);
+            throw error;
+        }
+    }
+
+    async goToPage(pageNumber) {
+        if (!this.pdfDoc) return;
+        
+        pageNumber = Math.max(1, Math.min(pageNumber, this.pdfDoc.numPages));
+        this.pageInput.value = pageNumber;
+        
+        const pageElement = document.getElementById(`page-${pageNumber}`);
+        if (pageElement) {
+            pageElement.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+
+    async zoom(delta) {
+        if (!this.pdfDoc) return;
+
+        const newScale = Math.max(0.5, Math.min(3, this.currentScale + delta));
+        if (newScale === this.currentScale) return;
+
+        // Sauvegarder les formes actuelles
+        const allShapes = new Map();
+        for (const [pageNumber, shapes] of this.shapes.entries()) {
+            allShapes.set(pageNumber, [...shapes]);
+        }
+
+        // Mettre à jour l'échelle
+        const oldScale = this.currentScale;
+        this.currentScale = newScale;
+        document.getElementById('zoom-level').textContent = `${Math.round(this.currentScale * 100)}%`;
+
+        // Vider les formes actuelles
+        this.shapes.clear();
+        this.drawingLayers.clear();
+
+        // Recharger les pages avec la nouvelle échelle
+        const container = document.getElementById('pdf-container');
+        const pages = container.getElementsByClassName('pdf-page');
+
+        for (let i = 0; i < pages.length; i++) {
+            const pageNumber = i + 1;
+            const page = await this.pdfDoc.getPage(pageNumber);
+            const viewport = page.getViewport({ scale: this.currentScale });
+            
+            // Mettre à jour le canvas PDF
+            const pageContainer = pages[i];
+            const canvas = pageContainer.getElementsByClassName('pdf-canvas')[0];
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            
+            // Redessiner le PDF
+            const context = canvas.getContext('2d');
+            await page.render({
+                canvasContext: context,
+                viewport: viewport
+            }).promise;
+
+            // Recréer le layer de dessin
+            const drawingCanvas = pageContainer.getElementsByClassName('drawing-layer')[0];
+            drawingCanvas.width = viewport.width;
+            drawingCanvas.height = viewport.height;
+            
+            const drawingContext = drawingCanvas.getContext('2d');
+            this.drawingLayers.set(pageNumber, {
+                canvas: drawingCanvas,
+                context: drawingContext
             });
 
-            // Pour chaque page
-            for (let i = 0; i < pages.length; i++) {
-                const page = pages[i];
-                
-                // Si ce n'est pas la première page, ajouter une nouvelle page
-                if (i > 0) {
-                    pdf.addPage([pdfDimensions.width, pdfDimensions.height]);
-                }
+            // Restaurer les formes avec les nouvelles coordonnées mises à l'échelle
+            if (allShapes.has(pageNumber)) {
+                const scaleRatio = newScale / oldScale;
+                const shapes = allShapes.get(pageNumber).map(shape => {
+                    const scaledShape = { ...shape };
 
-                // Créer un canvas temporaire avec la largeur augmentée
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = page.canvas.width + ((extraMargin * 2) * (96/72)); // Convertir les points en pixels
-                tempCanvas.height = page.canvas.height;
-                const tempCtx = tempCanvas.getContext('2d');
+                    if (shape.type === 'point') {
+                        scaledShape.start = this.scalePoint(shape.start, scaleRatio);
+                    } else if (shape.type === 'line' || shape.type === 'circle') {
+                        scaledShape.start = this.scalePoint(shape.start, scaleRatio);
+                        scaledShape.end = this.scalePoint(shape.end, scaleRatio);
+                    } else if (shape.type === 'polygon') {
+                        scaledShape.start = this.scalePoint(shape.start, scaleRatio);
+                        scaledShape.end = this.scalePoint(shape.end, scaleRatio);
+                    } else if (shape.type === 'freepolygon') {
+                        scaledShape.points = shape.points.map(p => this.scalePoint(p, scaleRatio));
+                    } else if (shape.type === 'text') {
+                        scaledShape.x = shape.x * scaleRatio;
+                        scaledShape.y = shape.y * scaleRatio;
+                    }
 
-                // Remplir le fond en blanc
-                tempCtx.fillStyle = '#FFFFFF';
-                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-
-                // Copier le contenu du canvas original au centre
-                tempCtx.drawImage(
-                    page.canvas, 
-                    (extraMargin * 96/72), // Position X avec marge
-                    0, // Position Y
-                    page.canvas.width,
-                    page.canvas.height
-                );
-
-                // Convertir le canvas temporaire en image
-                const imgData = tempCanvas.toDataURL('image/jpeg', 1.0);
-                
-                // Ajouter l'image au PDF
-                pdf.addImage(imgData, 'JPEG', 0, 0, pdfDimensions.width, pdfDimensions.height, '', 'FAST');
+                    return scaledShape;
+                });
+                this.shapes.set(pageNumber, shapes);
+                this.redrawShapes(pageNumber);
             }
-
-            // Sauvegarder le PDF
-            pdf.save('document_avec_annotations.pdf');
-            console.log('PDF sauvegardé avec succès');
-
-        } catch (error) {
-            console.error('Erreur lors de la sauvegarde du PDF:', error);
-            alert('Erreur lors de l\'enregistrement du PDF');
         }
     }
 
-    // Gestionnaire d'événement pour le bouton de sauvegarde
-    document.getElementById('btn-save')?.addEventListener('click', async () => {
-        console.log('Bouton de sauvegarde cliqué');
-        await savePDFWithAnnotations();
-    });
+    scalePoint(point, ratio) {
+        return {
+            x: point.x * ratio,
+            y: point.y * ratio
+        };
+    }
 
-    // Gestionnaire d'événements pour la lecture de texte du PDF
-    document.getElementById('btn-read')?.addEventListener('click', async () => {
-        if (!currentPdfDocument) {
-            alert('Veuillez d\'abord charger un PDF');
+    async savePDF() {
+        if (!this.pdfDoc || !this.currentFile) {
+            console.error('Aucun PDF ouvert');
             return;
         }
 
         try {
-            // Obtenir le numéro de la page courante en utilisant la nouvelle méthode
-            const currentPageIndex = canvasManager.getCurrentPageIndex();
+            // Charger le PDF original avec pdf-lib
+            const pdfBytes = await this.currentFile.arrayBuffer();
+            const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
             
-            if (currentPageIndex === -1) {
-                alert('Erreur : Impossible de déterminer la page courante');
-                return;
-            }
-            
-            // Vérifier si la page existe dans le PDF
-            if (currentPageIndex >= currentPdfDocument.numPages) {
-                alert(`Page invalide. Le document contient ${currentPdfDocument.numPages} pages.`);
-                return;
-            }
+            // Pour chaque page
+            for (let pageNum = 1; pageNum <= this.pdfDoc.numPages; pageNum++) {
+                const drawingLayer = this.drawingLayers.get(pageNum);
+                if (!drawingLayer) continue;
 
-            // Obtenir la page du PDF (les pages commencent à 1, pas à 0)
-            const page = await currentPdfDocument.getPage(currentPageIndex + 1);
-            
-            // Extraire le texte de la page
-            const textContent = await page.getTextContent();
-            const text = textContent.items
-                .map(item => item.str)
-                .join(' ')
-                .trim();
+                // Convertir le canvas en PNG
+                const imageBytes = await new Promise(resolve => {
+                    drawingLayer.canvas.toBlob(async blob => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(new Uint8Array(reader.result));
+                        reader.readAsArrayBuffer(blob);
+                    }, 'image/png');
+                });
 
-            if (text) {
-                console.log(`Lecture de la page ${currentPageIndex + 1}`);
+                // Incorporer l'image PNG dans le PDF
+                const image = await pdfDoc.embedPng(imageBytes);
                 
-                // Créer un objet SpeechSynthesisUtterance
-                const utterance = new SpeechSynthesisUtterance();
-                
-                // Configurer la voix en français
-                utterance.text = text;
-                utterance.lang = 'fr-FR';
-                utterance.rate = 1.0;
-                utterance.pitch = 1.0;
-                
-                // Arrêter toute lecture en cours
-                window.speechSynthesis.cancel();
-                
-                // Ajouter des contrôles de lecture
-                utterance.onstart = () => {
-                    console.log(`Début de la lecture de la page ${currentPageIndex + 1}`);
-                    const stopButton = document.getElementById('btn-stop-read');
-                    if (stopButton) {
-                        stopButton.classList.add('is-danger');
-                    }
-                };
-                
-                utterance.onend = () => {
-                    console.log(`Fin de la lecture de la page ${currentPageIndex + 1}`);
-                    const stopButton = document.getElementById('btn-stop-read');
-                    if (stopButton) {
-                        stopButton.classList.remove('is-danger');
-                    }
-                };
-                
-                utterance.onerror = (event) => {
-                    // Ne pas afficher d'erreur si la lecture a été volontairement arrêtée
-                    if (event.error !== 'canceled') {
-                        console.error('Erreur de lecture:', event);
-                        alert('Erreur lors de la lecture du texte');
-                    }
-                    const stopButton = document.getElementById('btn-stop-read');
-                    if (stopButton) {
-                        stopButton.classList.remove('is-danger');
-                    }
-                };
+                // Obtenir la page
+                const page = pdfDoc.getPage(pageNum - 1);
+                const { width, height } = page.getSize();
 
-                // Lire le texte
-                window.speechSynthesis.speak(utterance);
-            } else {
-                alert(`Aucun texte trouvé sur la page ${currentPageIndex + 1} du PDF`);
-            }
-        } catch (error) {
-            console.error('Erreur lors de la lecture du PDF:', error);
-            alert(`Erreur lors de la lecture de la page. Assurez-vous que la page existe dans le document.`);
-        }
-    });
-
-    // Gestionnaire pour arrêter la lecture
-    document.getElementById('btn-stop-read')?.addEventListener('click', () => {
-        // Arrêter la lecture en cours
-        window.speechSynthesis.cancel();
-        // Réinitialiser l'apparence du bouton
-        const stopButton = document.getElementById('btn-stop-read');
-        if (stopButton) {
-            stopButton.classList.remove('is-danger');
-        }
-        console.log('Lecture arrêtée');
-    });
-
-    // Variables pour le zoom
-    let currentZoom = 1;
-    const zoomStep = 0.1;
-    const maxZoom = 3;
-    const minZoom = 0.5;
-
-    // Fonction pour obtenir les coordonnées réelles en tenant compte du zoom
-    function getScaledCoordinates(event, canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const container = document.getElementById('container1');
-        
-        // Obtenir le défilement du conteneur
-        const scrollLeft = container.scrollLeft;
-        const scrollTop = container.scrollTop;
-
-        // Calculer les coordonnées en pixels par rapport au canvas
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-
-        // Calculer le ratio entre la taille réelle du canvas et sa taille affichée
-        const displayToRealRatio = canvas.width / (rect.width * currentZoom);
-
-        // Appliquer le ratio et ajouter le défilement
-        return {
-            x: (x * displayToRealRatio) + (scrollLeft * displayToRealRatio),
-            y: (y * displayToRealRatio) + (scrollTop * displayToRealRatio)
-        };
-    }
-
-    // Fonction pour appliquer le zoom
-    function applyZoom(zoomLevel) {
-        const container = document.getElementById('container1');
-        if (!container) return;
-
-        // Sauvegarder la position de défilement et le point central actuels
-        const scrollLeft = container.scrollLeft;
-        const scrollTop = container.scrollTop;
-        const centerX = (container.scrollLeft + container.clientWidth / 2) / currentZoom;
-        const centerY = (container.scrollTop + container.clientHeight / 2) / currentZoom;
-
-        // Mettre à jour le zoom
-        currentZoom = Math.min(Math.max(zoomLevel, minZoom), maxZoom);
-
-        // Appliquer le zoom au conteneur
-        container.style.transform = `scale(${currentZoom})`;
-        container.style.transformOrigin = 'top left';
-
-        // Ajuster la taille du conteneur
-        const pages = canvasManager.pages;
-        if (pages && pages.length > 0) {
-            const baseWidth = pages[0].canvas.width;
-            const baseHeight = pages[0].canvas.height;
-            container.style.width = `${baseWidth * currentZoom}px`;
-            container.style.height = `${baseHeight * currentZoom}px`;
-        }
-
-        // Recentrer sur le même point
-        container.scrollLeft = centerX * currentZoom - container.clientWidth / 2;
-        container.scrollTop = centerY * currentZoom - container.clientHeight / 2;
-
-        // Mettre à jour l'échelle des annotations
-        updateAnnotationsScale();
-    }
-
-    // Fonction pour mettre à jour l'échelle des annotations
-    function updateAnnotationsScale() {
-        const pages = canvasManager.pages;
-        if (!pages) return;
-
-        pages.forEach(page => {
-            if (page.annotations) {
-                page.annotations.forEach(annotation => {
-                    // Mettre à jour la position et la taille des annotations
-                    if (annotation.scale !== currentZoom) {
-                        const scaleRatio = currentZoom / (annotation.scale || 1);
-                        annotation.x *= scaleRatio;
-                        annotation.y *= scaleRatio;
-                        if (annotation.width) annotation.width *= scaleRatio;
-                        if (annotation.height) annotation.height *= scaleRatio;
-                        annotation.scale = currentZoom;
-                    }
+                // Ajouter l'image des annotations comme une nouvelle couche
+                page.drawImage(image, {
+                    x: 0,
+                    y: 0,
+                    width: width,
+                    height: height,
+                    opacity: 1
                 });
             }
-        });
 
-        // Redessiner toutes les pages
-        canvasManager.redrawAll();
+            // Sauvegarder le PDF modifié
+            const modifiedPdfBytes = await pdfDoc.save();
+            const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+            
+            // Créer un lien de téléchargement
+            const fileName = this.currentFile.name.replace('.pdf', '_with_annotations.pdf');
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            console.log('PDF sauvegardé avec succès');
+        } catch (error) {
+            console.error('Erreur lors de la sauvegarde du PDF:', error);
+        }
     }
 
-    // Modifier la classe CanvasManager pour utiliser les coordonnées mises à l'échelle
-    CanvasManager.prototype.addEventListeners = function(canvas) {
-        const page = this.getCurrentPage();
-        if (!page) return;
-
-        canvas.addEventListener('mousedown', (e) => {
-            const coords = getScaledCoordinates(e, canvas);
-            this.handleMouseDown(coords.x, coords.y);
-        });
-
-        canvas.addEventListener('mousemove', (e) => {
-            const coords = getScaledCoordinates(e, canvas);
-            this.handleMouseMove(coords.x, coords.y);
-        });
-
-        canvas.addEventListener('mouseup', (e) => {
-            const coords = getScaledCoordinates(e, canvas);
-            this.handleMouseUp(coords.x, coords.y);
-        });
-
-        // Empêcher le zoom du navigateur lors de l'utilisation de Ctrl + molette
-        canvas.addEventListener('wheel', (e) => {
-            if (e.ctrlKey) {
-                e.preventDefault();
-            }
-        }, { passive: false });
-    };
-
-    // Mettre à jour la fonction de dessin des points pour tenir compte du zoom
-    CanvasManager.prototype.drawPoint = function(x, y, color = 'black', size = 5) {
-        const page = this.getCurrentPage();
-        if (!page) return;
-
-        const ctx = page.canvas.getContext('2d');
-        ctx.beginPath();
-        ctx.arc(x, y, size / currentZoom, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.fill();
-        ctx.closePath();
-
-        // Sauvegarder le point dans les annotations
-        page.annotations = page.annotations || [];
-        page.annotations.push({
-            type: 'point',
-            x: x,
-            y: y,
-            color: color,
-            size: size,
-            scale: currentZoom
-        });
-    };
-
-    // Gestionnaires d'événements pour les boutons de zoom
-    document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
-        applyZoom(currentZoom + zoomStep);
-    });
-
-    document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
-        applyZoom(currentZoom - zoomStep);
-    });
-
-    document.getElementById('btn-zoom-reset')?.addEventListener('click', () => {
-        applyZoom(1);
-    });
-
-    // Ajouter le support du zoom avec la molette de la souris en maintenant Ctrl
-    document.addEventListener('wheel', (e) => {
-        if (e.ctrlKey) {
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? -zoomStep : zoomStep;
-            applyZoom(currentZoom + delta);
+    toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            this.container.requestFullscreen().catch(err => {
+                console.error('Erreur lors du passage en plein écran:', err);
+            });
+        } else {
+            document.exitFullscreen();
         }
-    }, { passive: false });
-});
+    }
+}
