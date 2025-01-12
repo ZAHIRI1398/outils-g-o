@@ -799,10 +799,10 @@ class CanvasManager {
                 return distance <= this.eraserRadius;
             
             case 'line':
+            case 'measure':  
                 return this.isPointNearLine(point, shape.start, shape.end);
             
             case 'circle':
-                // Calculer la distance entre le point et le centre du cercle
                 const center = shape.start;
                 const radius = Math.sqrt(
                     Math.pow(shape.end.x - shape.start.x, 2) +
@@ -815,16 +815,13 @@ class CanvasManager {
                 return Math.abs(distanceToCenter - radius) <= this.eraserRadius;
             
             case 'text':
-                // Obtenir le contexte pour mesurer le texte
-                const context = this.drawingLayers.get(1).context; // On utilise le premier contexte disponible
+                const context = this.drawingLayers.get(1).context;
                 context.font = `${shape.fontSize}px Arial`;
                 const metrics = context.measureText(shape.text);
                 const textWidth = metrics.width;
                 const textHeight = shape.fontSize;
 
-                // Vérifier si le point est près du texte
                 const textDistance = Math.min(
-                    // Distance au rectangle du texte
                     Math.abs(point.x - shape.x),
                     Math.abs(point.x - (shape.x + textWidth)),
                     Math.abs(point.y - shape.y),
