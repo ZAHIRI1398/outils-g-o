@@ -481,7 +481,7 @@ class CanvasManager {
                         // Ajouter un petit label "M"
                         context.fillStyle = 'blue';
                         context.font = '12px Arial';
-                        context.fillText('.', shape.start.x + 8, shape.start.y - 8);
+                        context.fillText('M', shape.start.x + 8, shape.start.y - 8);
                     } else {
                         context.fillStyle = 'black';
                         context.arc(shape.start.x, shape.start.y, 3, 0, 2 * Math.PI);
@@ -516,7 +516,7 @@ class CanvasManager {
                     // Ajouter le label "" pour le centre
                     context.fillStyle = 'blue';
                     context.font = '12px Arial';
-                    context.fillText('.', shape.start.x + 8, shape.start.y - 8);
+                    context.fillText('C', shape.start.x + 8, shape.start.y - 8);
                     
                     // Afficher le rayon en cm
                     const radiusCm = this.formatDistance(radius);
