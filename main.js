@@ -513,7 +513,7 @@ class CanvasManager {
                     context.arc(shape.start.x, shape.start.y, 3, 0, 2 * Math.PI);
                     context.fill();
                     
-                    // Ajouter le label "C" pour le centre
+                    // Ajouter le label "" pour le centre
                     context.fillStyle = 'blue';
                     context.font = '12px Arial';
                     context.fillText('C', shape.start.x + 8, shape.start.y - 8);
